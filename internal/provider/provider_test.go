@@ -51,6 +51,14 @@ func TestProvider_ConfigureValidation(t *testing.T) {
 	})
 }
 
+func TestProvider_Resources(t *testing.T) {
+	p := New("test")()
+	resources := p.Resources(context.Background())
+	if len(resources) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(resources))
+	}
+}
+
 // TestAccProvider_Configure is an acceptance test that requires real credentials.
 // Run with: TF_ACC=1 go test -v ./internal/provider/...
 func TestAccProvider_Configure(t *testing.T) {

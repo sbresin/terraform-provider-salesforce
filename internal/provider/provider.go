@@ -233,7 +233,9 @@ func (p *SalesforceProvider) DataSources(_ context.Context) []func() datasource.
 }
 
 func (p *SalesforceProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{}
+	return []func() resource.Resource{
+		NewSelfSignedCertResource,
+	}
 }
 
 // stringValueOrEnv returns the string value if not null/unknown, otherwise the env var value.
