@@ -6,9 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -152,6 +154,40 @@ resource "salesforce_self_signed_cert" "test" {
 	if deleteCalls == 0 {
 		t.Fatal("expected delete deploy call during test cleanup")
 	}
+}
+
+func TestAccSelfSignedCertResource(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC not set, skipping acceptance test")
+	}
+
+	name := fmt.Sprintf("TerraformAccCert%d", time.Now().Unix())
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "salesforce_self_signed_cert" "test" {
+  developer_name = %q
+  master_label   = "Terraform Acceptance Cert"
+
+  key_size               = 2048
+  private_key_exportable = false
+  early_renewal_hours    = 720
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("salesforce_self_signed_cert.test", "id", name),
+					resource.TestCheckResourceAttrSet("salesforce_self_signed_cert.test", "cert_pem"),
+					resource.TestCheckResourceAttrSet("salesforce_self_signed_cert.test", "cert_sha256"),
+					resource.TestCheckResourceAttrSet("salesforce_self_signed_cert.test", "expiration_date"),
+					resource.TestCheckResourceAttr("salesforce_self_signed_cert.test", "key_size", "2048"),
+					resource.TestCheckResourceAttr("salesforce_self_signed_cert.test", "private_key_exportable", "false"),
+				),
+			},
+		},
+	})
 }
 
 func readDeployZip(body string) (string, error) {

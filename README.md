@@ -65,14 +65,21 @@ provider "salesforce" {
   # Uses environment variables for authentication
 }
 
-data "salesforce_cert" "integration" {
+resource "salesforce_self_signed_cert" "integration" {
   developer_name = "IntegrationCertificate"
+  master_label   = "Integration Certificate"
+
+  key_size               = 2048
+  private_key_exportable = false
+  early_renewal_hours    = 720
 }
 
-output "cert_expiration" {
-  value = data.salesforce_cert.integration.expiration_date
+output "cert_pem" {
+  value = salesforce_self_signed_cert.integration.cert_pem
 }
 ```
+
+`salesforce_self_signed_cert` creates a Salesforce-generated key pair and certificate. Salesforce owns the private key. The `cert_pem` output contains only the public certificate and can be shared with services that verify signatures created by Salesforce.
 
 ## Development
 
