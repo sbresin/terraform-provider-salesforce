@@ -17,11 +17,7 @@ import (
 type Uploader struct {
 	instanceURL string
 	cookies     []*http.Cookie
-	httpClient  *http.Client
 }
-
-// Option configures an Uploader.
-type Option func(*Uploader)
 
 // NewUploader creates a new certificate uploader.
 // The cookies should be obtained from a SessionSource.
@@ -29,14 +25,6 @@ func NewUploader(instanceURL string, cookies []*http.Cookie) *Uploader {
 	return &Uploader{
 		instanceURL: instanceURL,
 		cookies:     cookies,
-		httpClient:  http.DefaultClient,
-	}
-}
-
-// WithHTTPClient sets a custom HTTP client.
-func WithHTTPClient(client *http.Client) Option {
-	return func(u *Uploader) {
-		u.httpClient = client
 	}
 }
 
@@ -254,11 +242,4 @@ func checkForErrors(html string) error {
 	}
 
 	return nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
