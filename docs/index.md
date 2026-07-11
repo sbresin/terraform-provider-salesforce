@@ -43,7 +43,7 @@ Generate with: `sf org auth show-sfdx-auth-url -o <alias> --no-prompt`
 
 ## Data Sources
 
-### salesforce_certificate
+### salesforce_cert
 
 Retrieves information about a Salesforce Certificate.
 
@@ -60,12 +60,12 @@ Retrieves information about a Salesforce Certificate.
 **Example:**
 
 ```hcl
-data "salesforce_certificate" "integration" {
+data "salesforce_cert" "integration" {
   developer_name = "IntegrationCertificate"
 }
 
 output "cert_expiration" {
-  value = data.salesforce_certificate.integration.expiration_date
+  value = data.salesforce_cert.integration.expiration_date
 }
 ```
 

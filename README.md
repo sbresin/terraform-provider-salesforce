@@ -65,12 +65,12 @@ provider "salesforce" {
   # Uses environment variables for authentication
 }
 
-data "salesforce_certificate" "integration" {
+data "salesforce_cert" "integration" {
   developer_name = "IntegrationCertificate"
 }
 
 output "cert_expiration" {
-  value = data.salesforce_certificate.integration.expiration_date
+  value = data.salesforce_cert.integration.expiration_date
 }
 ```
 

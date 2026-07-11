@@ -22,13 +22,13 @@ func TestAccCertificateDataSource(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: `
-data "salesforce_certificate" "test" {
+data "salesforce_cert" "test" {
   developer_name = "TestCertificate"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("data.salesforce_certificate.test", "id"),
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "developer_name", "TestCertificate"),
+					resource.TestCheckResourceAttrSet("data.salesforce_cert.test", "id"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "developer_name", "TestCertificate"),
 				),
 			},
 		},
@@ -97,19 +97,19 @@ func TestCertificateDataSource_Read(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: `
-data "salesforce_certificate" "test" {
+data "salesforce_cert" "test" {
   developer_name = "TestCert"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "id", "TestCert"),
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "developer_name", "TestCert"),
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "master_label", "Test Certificate"),
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "expiration_date", "2025-12-31"),
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "is_private_key_exportable", "false"),
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "key_size", "2048"),
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "certificate", "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t"),
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "platform", "false"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "id", "TestCert"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "developer_name", "TestCert"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "master_label", "Test Certificate"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "expiration_date", "2025-12-31"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "is_private_key_exportable", "false"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "key_size", "2048"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "certificate", "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "platform", "false"),
 				),
 			},
 		},
@@ -167,7 +167,7 @@ func TestCertificateDataSource_NotFound(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: `
-data "salesforce_certificate" "test" {
+data "salesforce_cert" "test" {
   developer_name = "NonExistent"
 }
 `,
