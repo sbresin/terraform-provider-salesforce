@@ -321,6 +321,74 @@ resource "salesforce_self_signed_cert" "test" {
 	})
 }
 
+func TestSelfSignedCertResource_Import(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/services/oauth2/token":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "test-token"})
+		case r.URL.Path == "/services/oauth2/singleaccess":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"frontdoor_uri": serverURL + "/secur/frontdoor.jsp?otp=abc"})
+		case r.URL.Path == "/secur/frontdoor.jsp":
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "test-session-id"})
+			w.WriteHeader(http.StatusOK)
+		case strings.HasPrefix(r.URL.Path, "/services/Soap/m/"):
+			bodyBytes, _ := io.ReadAll(r.Body)
+			body := string(bodyBytes)
+			w.Header().Set("Content-Type", "text/xml")
+			switch {
+			case strings.Contains(body, "checkDeployStatus"):
+				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><checkDeployStatusResponse><result><id>0AfCreate</id><done>true</done><success>true</success><status>Succeeded</status></result></checkDeployStatusResponse></soapenv:Body></soapenv:Envelope>`))
+			case strings.Contains(body, "readMetadata"):
+				cert := base64.StdEncoding.EncodeToString([]byte(testCertPEM))
+				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><readMetadataResponse><result><records><fullName>ImportTestCert</fullName><masterLabel>Import Test Cert</masterLabel><certificate>` + cert + `</certificate><expirationDate>2027-07-11</expirationDate><keySize>2048</keySize><platform>false</platform><privateKeyExportable>false</privateKeyExportable></records></result></readMetadataResponse></soapenv:Body></soapenv:Envelope>`))
+			case strings.Contains(body, "deploy"):
+				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><deployResponse><result><id>0AfCreate</id><done>false</done><state>Queued</state></result></deployResponse></soapenv:Body></soapenv:Envelope>`))
+			default:
+				t.Fatalf("unexpected SOAP request: %s", body)
+			}
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+
+	t.Setenv("SALESFORCE_INSTANCE_URL", server.URL)
+	t.Setenv("SALESFORCE_CLIENT_ID", "test-client-id")
+	t.Setenv("SALESFORCE_CLIENT_SECRET", "test-client-secret")
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			// First create the resource so it exists for import
+			{
+				Config: `
+resource "salesforce_self_signed_cert" "test" {
+  developer_name         = "ImportTestCert"
+  master_label           = "Import Test Cert"
+  key_size               = 2048
+  private_key_exportable = false
+  early_renewal_hours    = 720
+}
+`,
+			},
+			// Test import by developer_name
+			{
+				ResourceName:      "salesforce_self_signed_cert.test",
+				ImportState:       true,
+				ImportStateId:     "ImportTestCert",
+				ImportStateVerify: true,
+				// early_renewal_hours is Terraform-only state, not stored in Salesforce,
+				// so after import it will be the default (0) instead of the original (720)
+				ImportStateVerifyIgnore: []string{"early_renewal_hours"},
+			},
+		},
+	})
+}
+
 func readDeployZip(body string) (string, error) {
 	var req struct {
 		ZipFile string `xml:"Body>deploy>ZipFile"`

@@ -25,6 +25,7 @@ import (
 var _ resource.Resource = &SelfSignedCertResource{}
 var _ resource.ResourceWithConfigure = &SelfSignedCertResource{}
 var _ resource.ResourceWithModifyPlan = &SelfSignedCertResource{}
+var _ resource.ResourceWithImportState = &SelfSignedCertResource{}
 
 type SelfSignedCertResource struct {
 	clients *ProviderClients
@@ -209,6 +210,10 @@ func (r *SelfSignedCertResource) Delete(ctx context.Context, req resource.Delete
 		resp.Diagnostics.AddError("Certificate Delete Deployment Failed", err.Error())
 		return
 	}
+}
+
+func (r *SelfSignedCertResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("developer_name"), req, resp)
 }
 
 func (r *SelfSignedCertResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
