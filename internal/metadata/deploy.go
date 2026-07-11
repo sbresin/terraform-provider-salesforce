@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"time"
 )
 
 // Deploy starts a metadata deployment and returns the deployment ID.
@@ -49,6 +50,34 @@ func (c *Client) CheckDeployStatus(ctx context.Context, deployID string) (*Deplo
 	}
 
 	return &resp.Result, nil
+}
+
+func (c *Client) WaitForDeploy(ctx context.Context, deployID string) (*DeployResult, error) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		result, err := c.CheckDeployStatus(ctx, deployID)
+		if err != nil {
+			return nil, err
+		}
+
+		if result.Done {
+			if result.Success {
+				return result, nil
+			}
+			if result.ErrorMessage != "" {
+				return result, fmt.Errorf("deployment %s failed: %s", deployID, result.ErrorMessage)
+			}
+			return result, fmt.Errorf("deployment %s failed with status %s", deployID, result.Status)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 // buildDestructiveChangesZip creates a zip package for destructive changes deployment.

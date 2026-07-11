@@ -224,3 +224,55 @@ func TestBuildDestructiveChangesZip(t *testing.T) {
 		}
 	}
 }
+
+func TestWaitForDeploy_Success(t *testing.T) {
+	call := 0
+	client, server := newTestMetadataClient(t, func(w http.ResponseWriter, r *http.Request) {
+		call++
+		w.Header().Set("Content-Type", "text/xml")
+		if call == 1 {
+			w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body><checkDeployStatusResponse><result><id>0AfTest</id><done>false</done><status>InProgress</status></result></checkDeployStatusResponse></soapenv:Body>
+</soapenv:Envelope>`))
+			return
+		}
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body><checkDeployStatusResponse><result><id>0AfTest</id><done>true</done><success>true</success><status>Succeeded</status></result></checkDeployStatusResponse></soapenv:Body>
+</soapenv:Envelope>`))
+	})
+	defer server.Close()
+
+	result, err := client.WaitForDeploy(context.Background(), "0AfTest")
+	if err != nil {
+		t.Fatalf("WaitForDeploy returned error: %v", err)
+	}
+	if !result.Success || result.Status != "Succeeded" {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestWaitForDeploy_Failure(t *testing.T) {
+	client, server := newTestMetadataClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/xml")
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body><checkDeployStatusResponse><result><id>0AfTest</id><done>true</done><success>false</success><status>Failed</status><errorMessage>bad cert</errorMessage></result></checkDeployStatusResponse></soapenv:Body>
+</soapenv:Envelope>`))
+	})
+	defer server.Close()
+
+	_, err := client.WaitForDeploy(context.Background(), "0AfTest")
+	if err == nil || !strings.Contains(err.Error(), "bad cert") {
+		t.Fatalf("expected failure containing bad cert, got %v", err)
+	}
+}
+
+func newTestMetadataClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.Server) {
+	t.Helper()
+
+	server := httptest.NewServer(handler)
+	client := NewClient(server.URL, "test-session-id", WithAPIVersion("67.0"))
+	return client, server
+}

@@ -171,11 +171,18 @@ type ComponentFailure struct {
 
 // --- Public types ---
 
+type CertificateCreate struct {
+	FullName             string
+	MasterLabel          string
+	KeySize              int
+	PrivateKeyExportable bool
+}
+
 // Certificate represents a Salesforce certificate with all metadata.
 type Certificate struct {
 	FullName             string
 	MasterLabel          string
-	Certificate          string     // base64-encoded PEM certificate chain
+	Certificate          string // base64-encoded PEM certificate chain
 	ExpirationDate       *time.Time
 	KeySize              int
 	Platform             bool

@@ -1,6 +1,8 @@
 package metadata
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -203,4 +205,54 @@ func TestClient_DeleteCertificate(t *testing.T) {
 			t.Errorf("expected deployID '0Af000000000001', got %q", deployID)
 		}
 	})
+}
+
+func TestBuildCertificateDeployZip(t *testing.T) {
+	zipData, err := buildCertificateDeployZip(CertificateCreate{
+		FullName:             "TerraformE2ESigningCert",
+		MasterLabel:          "Terraform E2E Signing Cert",
+		KeySize:              2048,
+		PrivateKeyExportable: false,
+	}, "67.0")
+	if err != nil {
+		t.Fatalf("buildCertificateDeployZip returned error: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		t.Fatalf("zip did not parse: %v", err)
+	}
+
+	files := map[string]string{}
+	for _, f := range zr.File {
+		r, err := f.Open()
+		if err != nil {
+			t.Fatalf("opening %s: %v", f.Name, err)
+		}
+		content, err := io.ReadAll(r)
+		_ = r.Close()
+		if err != nil {
+			t.Fatalf("reading %s: %v", f.Name, err)
+		}
+		files[f.Name] = string(content)
+	}
+
+	packageXML := files["package.xml"]
+	if !strings.Contains(packageXML, "<members>TerraformE2ESigningCert</members>") {
+		t.Fatalf("package.xml missing certificate member: %s", packageXML)
+	}
+	if !strings.Contains(packageXML, "<name>Certificate</name>") {
+		t.Fatalf("package.xml missing Certificate type: %s", packageXML)
+	}
+
+	certXML := files["certs/TerraformE2ESigningCert.cert-meta.xml"]
+	for _, want := range []string{
+		"<keySize>2048</keySize>",
+		"<masterLabel>Terraform E2E Signing Cert</masterLabel>",
+		"<privateKeyExportable>false</privateKeyExportable>",
+	} {
+		if !strings.Contains(certXML, want) {
+			t.Fatalf("certificate XML missing %q: %s", want, certXML)
+		}
+	}
 }

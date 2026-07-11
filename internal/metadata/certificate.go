@@ -1,6 +1,8 @@
 package metadata
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
@@ -8,6 +10,23 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+func (c *Client) CreateCertificate(ctx context.Context, cert CertificateCreate) (string, error) {
+	zipData, err := buildCertificateDeployZip(cert, c.apiVersion)
+	if err != nil {
+		return "", err
+	}
+
+	deployID, err := c.Deploy(ctx, zipData, DeployOptions{
+		SinglePackage:   true,
+		RollbackOnError: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("deploying certificate metadata: %w", err)
+	}
+
+	return deployID, nil
+}
 
 // ReadCertificate reads a single certificate by its fullName (developer name).
 // Returns ErrNotFound if the certificate does not exist.
@@ -109,4 +128,63 @@ func (c *Client) DeleteCertificate(ctx context.Context, fullName string) (string
 	}
 
 	return deployID, nil
+}
+
+func buildCertificateDeployZip(cert CertificateCreate, apiVersion string) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	packageXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>%s</members>
+        <name>Certificate</name>
+    </types>
+    <version>%s</version>
+</Package>`, cert.FullName, apiVersion)
+
+	if err := writeZipFile(zw, "package.xml", []byte(packageXML)); err != nil {
+		return nil, err
+	}
+
+	masterLabel := cert.MasterLabel
+	if masterLabel == "" {
+		masterLabel = cert.FullName
+	}
+
+	certXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<Certificate xmlns="http://soap.sforce.com/2006/04/metadata">
+    <keySize>%d</keySize>
+    <masterLabel>%s</masterLabel>
+    <privateKeyExportable>%t</privateKeyExportable>
+</Certificate>`, cert.KeySize, xmlEscape(masterLabel), cert.PrivateKeyExportable)
+
+	if err := writeZipFile(zw, fmt.Sprintf("certs/%s.cert-meta.xml", cert.FullName), []byte(certXML)); err != nil {
+		return nil, err
+	}
+
+	if err := zw.Close(); err != nil {
+		return nil, fmt.Errorf("closing zip: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+func writeZipFile(zw *zip.Writer, name string, content []byte) error {
+	w, err := zw.Create(name)
+	if err != nil {
+		return fmt.Errorf("creating %s: %w", name, err)
+	}
+	if _, err := w.Write(content); err != nil {
+		return fmt.Errorf("writing %s: %w", name, err)
+	}
+	return nil
+}
+
+func xmlEscape(s string) string {
+	var buf bytes.Buffer
+	if err := xml.EscapeText(&buf, []byte(s)); err != nil {
+		return s
+	}
+	return buf.String()
 }
