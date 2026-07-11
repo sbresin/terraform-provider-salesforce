@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "salesforce-docs-scrape": {
+      "source": "/home/sebe/workspace/skills",
+      "sourceType": "local",
+      "computedHash": "bc38bdf836dbe6e1921842e23fd6763a6a0556ddf0e0efbc017ffdc3abdffe3c"
+    }
+  }
+}

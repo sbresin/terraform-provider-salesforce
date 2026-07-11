@@ -146,7 +146,22 @@ func (r *SelfSignedCertResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	state, err := r.readState(ctx, plan.DeveloperName.ValueString(), plan.EarlyRenewalHours.ValueInt64())
+	// Salesforce generates the certificate asynchronously after deploy.
+	// Retry reading until the certificate content is available.
+	var state *selfSignedCertResourceModel
+	for attempt := 0; attempt < 10; attempt++ {
+		state, err = r.readState(ctx, plan.DeveloperName.ValueString(), plan.EarlyRenewalHours.ValueInt64())
+		if err == nil {
+			break
+		}
+		// Wait before retrying (500ms, 1s, 1.5s, ...)
+		select {
+		case <-ctx.Done():
+			resp.Diagnostics.AddError("Error Reading Created Certificate", ctx.Err().Error())
+			return
+		case <-time.After(time.Duration(500*(attempt+1)) * time.Millisecond):
+		}
+	}
 	if err != nil {
 		resp.Diagnostics.AddError("Error Reading Created Certificate", err.Error())
 		return

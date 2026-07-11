@@ -68,7 +68,7 @@ func TestCertificateDataSource_Read(t *testing.T) {
         <records>
           <fullName>TestCert</fullName>
           <masterLabel>Test Certificate</masterLabel>
-          <certificate>LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t</certificate>
+          <content>LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t</content>
           <expirationDate>2025-12-31</expirationDate>
           <keySize>2048</keySize>
           <platform>false</platform>

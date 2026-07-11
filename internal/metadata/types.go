@@ -110,7 +110,7 @@ type ReadMetadataResponse struct {
 type CertificateRecord struct {
 	FullName             string `xml:"fullName"`
 	MasterLabel          string `xml:"masterLabel"`
-	Certificate          string `xml:"certificate"` // base64-encoded PEM
+	Certificate          string `xml:"content"` // base64-encoded PEM (Salesforce returns this as "content")
 	ExpirationDate       string `xml:"expirationDate,omitempty"`
 	KeySize              int    `xml:"keySize,omitempty"`
 	Platform             bool   `xml:"platform,omitempty"`

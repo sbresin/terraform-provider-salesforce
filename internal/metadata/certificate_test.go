@@ -24,7 +24,7 @@ func TestClient_ReadCertificate(t *testing.T) {
         <records>
           <fullName>TestCert</fullName>
           <masterLabel>Test Certificate</masterLabel>
-          <certificate>LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t</certificate>
+          <content>LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t</content>
           <expirationDate>2025-12-31</expirationDate>
           <keySize>2048</keySize>
           <platform>false</platform>
@@ -245,7 +245,7 @@ func TestBuildCertificateDeployZip(t *testing.T) {
 		t.Fatalf("package.xml missing Certificate type: %s", packageXML)
 	}
 
-	certXML := files["certs/TerraformE2ESigningCert.cert-meta.xml"]
+	certXML := files["certs/TerraformE2ESigningCert.crt-meta.xml"]
 	for _, want := range []string{
 		"<keySize>2048</keySize>",
 		"<masterLabel>Terraform E2E Signing Cert</masterLabel>",

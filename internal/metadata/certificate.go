@@ -66,7 +66,14 @@ func (c *Client) ReadCertificate(ctx context.Context, fullName string) (*Certifi
 
 	// Parse expiration date if present
 	if record.ExpirationDate != "" {
-		t, err := time.Parse("2006-01-02", record.ExpirationDate)
+		// Try ISO 8601 with time first, then date-only format
+		t, err := time.Parse(time.RFC3339, record.ExpirationDate)
+		if err != nil {
+			t, err = time.Parse("2006-01-02T15:04:05.000Z", record.ExpirationDate)
+		}
+		if err != nil {
+			t, err = time.Parse("2006-01-02", record.ExpirationDate)
+		}
 		if err == nil {
 			cert.ExpirationDate = &t
 		} else {
@@ -159,7 +166,7 @@ func buildCertificateDeployZip(cert CertificateCreate, apiVersion string) ([]byt
     <privateKeyExportable>%t</privateKeyExportable>
 </Certificate>`, cert.KeySize, xmlEscape(masterLabel), cert.PrivateKeyExportable)
 
-	if err := writeZipFile(zw, fmt.Sprintf("certs/%s.cert-meta.xml", cert.FullName), []byte(certXML)); err != nil {
+	if err := writeZipFile(zw, fmt.Sprintf("certs/%s.crt-meta.xml", cert.FullName), []byte(certXML)); err != nil {
 		return nil, err
 	}
 
