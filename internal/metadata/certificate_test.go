@@ -2,8 +2,10 @@ package metadata
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -145,6 +147,62 @@ func TestClient_ListCertificates(t *testing.T) {
 
 		if len(names) != 0 {
 			t.Errorf("expected empty list, got %v", names)
+		}
+	})
+}
+
+func TestClient_DeleteCertificate(t *testing.T) {
+	t.Run("successful delete", func(t *testing.T) {
+		requestCount := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestCount++
+			w.Header().Set("Content-Type", "text/xml")
+
+			body, _ := io.ReadAll(r.Body)
+			bodyStr := string(body)
+
+			if strings.Contains(bodyStr, "deploy") && !strings.Contains(bodyStr, "checkDeployStatus") {
+				// Deploy request
+				w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <deployResponse>
+      <result>
+        <id>0Af000000000001</id>
+        <done>false</done>
+        <state>Queued</state>
+      </result>
+    </deployResponse>
+  </soapenv:Body>
+</soapenv:Envelope>`))
+			} else {
+				// CheckDeployStatus request - return done
+				w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <checkDeployStatusResponse>
+      <result>
+        <id>0Af000000000001</id>
+        <done>true</done>
+        <success>true</success>
+        <status>Succeeded</status>
+      </result>
+    </checkDeployStatusResponse>
+  </soapenv:Body>
+</soapenv:Envelope>`))
+			}
+		}))
+		defer server.Close()
+
+		client := NewClient(server.URL, "test-session-id")
+		deployID, err := client.DeleteCertificate(context.Background(), "TestCert")
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if deployID != "0Af000000000001" {
+			t.Errorf("expected deployID '0Af000000000001', got %q", deployID)
 		}
 	})
 }

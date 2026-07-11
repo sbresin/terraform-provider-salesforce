@@ -80,3 +80,24 @@ func (c *Client) ListCertificates(ctx context.Context) ([]string, error) {
 
 	return names, nil
 }
+
+// DeleteCertificate deletes a certificate by deploying destructive changes.
+// Returns the deployment ID. The caller can use CheckDeployStatus to poll for completion.
+func (c *Client) DeleteCertificate(ctx context.Context, fullName string) (string, error) {
+	// Build destructive changes zip
+	zipData, err := buildDestructiveChangesZip("Certificate", fullName, c.apiVersion)
+	if err != nil {
+		return "", fmt.Errorf("building destructive changes: %w", err)
+	}
+
+	// Deploy the destructive changes
+	deployID, err := c.Deploy(ctx, zipData, DeployOptions{
+		SinglePackage:   true,
+		RollbackOnError: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("deploying destructive changes: %w", err)
+	}
+
+	return deployID, nil
+}
