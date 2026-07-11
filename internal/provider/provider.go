@@ -186,7 +186,9 @@ func (p *SalesforceProvider) Configure(ctx context.Context, req provider.Configu
 }
 
 func (p *SalesforceProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		NewCertificateDataSource,
+	}
 }
 
 func (p *SalesforceProvider) Resources(_ context.Context) []func() resource.Resource {
