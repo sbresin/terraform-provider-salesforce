@@ -2,19 +2,20 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/sbresin/terraform-provider-salesforce/internal/client"
+	"github.com/sbresin/terraform-provider-salesforce/internal/metadata"
 )
 
 var _ datasource.DataSource = &CertificateDataSource{}
 var _ datasource.DataSourceWithConfigure = &CertificateDataSource{}
 
 type CertificateDataSource struct {
-	client *client.Client
+	clients *ProviderClients
 }
 
 type CertificateDataSourceModel struct {
@@ -24,6 +25,8 @@ type CertificateDataSourceModel struct {
 	ExpirationDate         types.String `tfsdk:"expiration_date"`
 	IsPrivateKeyExportable types.Bool   `tfsdk:"is_private_key_exportable"`
 	KeySize                types.Int64  `tfsdk:"key_size"`
+	Certificate            types.String `tfsdk:"certificate"`
+	Platform               types.Bool   `tfsdk:"platform"`
 }
 
 func NewCertificateDataSource() datasource.DataSource {
@@ -62,6 +65,14 @@ func (d *CertificateDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 				Description: "The key size in bits (e.g., 2048, 4096).",
 				Computed:    true,
 			},
+			"certificate": schema.StringAttribute{
+				Description: "The certificate chain in base64-encoded PEM format.",
+				Computed:    true,
+			},
+			"platform": schema.BoolAttribute{
+				Description: "Whether this is a platform certificate.",
+				Computed:    true,
+			},
 		},
 	}
 }
@@ -71,16 +82,16 @@ func (d *CertificateDataSource) Configure(_ context.Context, req datasource.Conf
 		return
 	}
 
-	client, ok := req.ProviderData.(*client.Client)
+	clients, ok := req.ProviderData.(*ProviderClients)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *ProviderClients, got: %T", req.ProviderData),
 		)
 		return
 	}
 
-	d.client = client
+	d.clients = clients
 }
 
 func (d *CertificateDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -92,27 +103,16 @@ func (d *CertificateDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 	developerName := data.DeveloperName.ValueString()
 
-	// Query the Tooling API for the certificate
-	soql := fmt.Sprintf(
-		"SELECT Id, DeveloperName, MasterLabel, ExpirationDate, OptionsIsPrivateKeyExportable, KeySize "+
-			"FROM Certificate WHERE DeveloperName = '%s'",
-		escapeSoqlString(developerName),
-	)
-
-	var result struct {
-		Records []struct {
-			ID                            string `json:"Id"`
-			DeveloperName                 string `json:"DeveloperName"`
-			MasterLabel                   string `json:"MasterLabel"`
-			ExpirationDate                string `json:"ExpirationDate"`
-			OptionsIsPrivateKeyExportable bool   `json:"OptionsIsPrivateKeyExportable"`
-			KeySize                       int64  `json:"KeySize"`
-		} `json:"records"`
-		TotalSize int `json:"totalSize"`
-	}
-
-	err := d.client.ToolingQuery(ctx, soql, &result)
+	// Use metadata client to read certificate
+	cert, err := d.clients.Metadata.ReadCertificate(ctx, developerName)
 	if err != nil {
+		if errors.Is(err, metadata.ErrNotFound) {
+			resp.Diagnostics.AddError(
+				"Certificate Not Found",
+				fmt.Sprintf("Certificate with DeveloperName %q not found.", developerName),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Reading Certificate",
 			fmt.Sprintf("Unable to read certificate %q: %s", developerName, err),
@@ -120,45 +120,20 @@ func (d *CertificateDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	if result.TotalSize == 0 {
-		resp.Diagnostics.AddError(
-			"Certificate Not Found",
-			fmt.Sprintf("Certificate with DeveloperName %q not found.", developerName),
-		)
-		return
-	}
-
-	if result.TotalSize > 1 {
-		resp.Diagnostics.AddError(
-			"Multiple Certificates Found",
-			fmt.Sprintf("Expected 1 certificate with DeveloperName %q, found %d.", developerName, result.TotalSize),
-		)
-		return
-	}
-
-	cert := result.Records[0]
-	data.ID = types.StringValue(cert.ID)
-	data.DeveloperName = types.StringValue(cert.DeveloperName)
+	// Map certificate to model
+	data.ID = types.StringValue(cert.FullName)
+	data.DeveloperName = types.StringValue(cert.FullName)
 	data.MasterLabel = types.StringValue(cert.MasterLabel)
-	data.ExpirationDate = types.StringValue(cert.ExpirationDate)
-	data.IsPrivateKeyExportable = types.BoolValue(cert.OptionsIsPrivateKeyExportable)
-	data.KeySize = types.Int64Value(cert.KeySize)
+	data.Certificate = types.StringValue(cert.Certificate)
+	data.KeySize = types.Int64Value(int64(cert.KeySize))
+	data.IsPrivateKeyExportable = types.BoolValue(cert.PrivateKeyExportable)
+	data.Platform = types.BoolValue(cert.Platform)
+
+	if cert.ExpirationDate != nil {
+		data.ExpirationDate = types.StringValue(cert.ExpirationDate.Format("2006-01-02"))
+	} else {
+		data.ExpirationDate = types.StringNull()
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-// escapeSoqlString escapes special characters in a string for use in SOQL.
-func escapeSoqlString(s string) string {
-	// Escape single quotes by doubling them
-	result := ""
-	for _, r := range s {
-		if r == '\'' {
-			result += "''"
-		} else if r == '\\' {
-			result += "\\\\"
-		} else {
-			result += string(r)
-		}
-	}
-	return result
 }

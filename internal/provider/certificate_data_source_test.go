@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -36,6 +37,8 @@ data "salesforce_certificate" "test" {
 
 func TestCertificateDataSource_Read(t *testing.T) {
 	// Unit test with mock server
+	var serverURL string
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/services/oauth2/token":
@@ -43,29 +46,46 @@ func TestCertificateDataSource_Read(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]string{
 				"access_token": "test-token",
 			})
-		case r.URL.Path == "/services/data/v61.0/tooling/query":
+
+		case r.URL.Path == "/services/oauth2/singleaccess":
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{
-				"size":      1,
-				"totalSize": 1,
-				"done":      true,
-				"records": []map[string]any{
-					{
-						"Id":                            "0P1000000000001AAA",
-						"DeveloperName":                 "TestCert",
-						"MasterLabel":                   "Test Certificate",
-						"ExpirationDate":                "2025-12-31",
-						"OptionsIsPrivateKeyExportable": false,
-						"KeySize":                       2048,
-					},
-				},
+			json.NewEncoder(w).Encode(map[string]string{
+				"frontdoor_uri": serverURL + "/secur/frontdoor.jsp?otp=abc",
 			})
+
+		case r.URL.Path == "/secur/frontdoor.jsp":
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "test-session-id"})
+			w.WriteHeader(http.StatusOK)
+
+		case strings.HasPrefix(r.URL.Path, "/services/Soap/m/"):
+			// Metadata API request
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <readMetadataResponse>
+      <result>
+        <records>
+          <fullName>TestCert</fullName>
+          <masterLabel>Test Certificate</masterLabel>
+          <certificate>LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t</certificate>
+          <expirationDate>2025-12-31</expirationDate>
+          <keySize>2048</keySize>
+          <platform>false</platform>
+          <privateKeyExportable>false</privateKeyExportable>
+        </records>
+      </result>
+    </readMetadataResponse>
+  </soapenv:Body>
+</soapenv:Envelope>`))
+
 		default:
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	defer server.Close()
+	serverURL = server.URL
 
 	// Set environment variables for provider
 	t.Setenv("SALESFORCE_INSTANCE_URL", server.URL)
@@ -82,12 +102,13 @@ data "salesforce_certificate" "test" {
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "id", "0P1000000000001AAA"),
+					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "id", "TestCert"),
 					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "developer_name", "TestCert"),
 					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "master_label", "Test Certificate"),
 					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "expiration_date", "2025-12-31"),
 					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "is_private_key_exportable", "false"),
 					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "key_size", "2048"),
+					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "certificate", "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t"),
 				),
 			},
 		},
@@ -95,6 +116,8 @@ data "salesforce_certificate" "test" {
 }
 
 func TestCertificateDataSource_NotFound(t *testing.T) {
+	var serverURL string
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/services/oauth2/token":
@@ -102,19 +125,37 @@ func TestCertificateDataSource_NotFound(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]string{
 				"access_token": "test-token",
 			})
-		case r.URL.Path == "/services/data/v61.0/tooling/query":
+
+		case r.URL.Path == "/services/oauth2/singleaccess":
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{
-				"size":      0,
-				"totalSize": 0,
-				"done":      true,
-				"records":   []map[string]any{},
+			json.NewEncoder(w).Encode(map[string]string{
+				"frontdoor_uri": serverURL + "/secur/frontdoor.jsp?otp=abc",
 			})
+
+		case r.URL.Path == "/secur/frontdoor.jsp":
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "test-session-id"})
+			w.WriteHeader(http.StatusOK)
+
+		case strings.HasPrefix(r.URL.Path, "/services/Soap/m/"):
+			// Return empty result (not found)
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <readMetadataResponse>
+      <result>
+        <records/>
+      </result>
+    </readMetadataResponse>
+  </soapenv:Body>
+</soapenv:Envelope>`))
+
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	defer server.Close()
+	serverURL = server.URL
 
 	t.Setenv("SALESFORCE_INSTANCE_URL", server.URL)
 	t.Setenv("SALESFORCE_CLIENT_ID", "test-client-id")
