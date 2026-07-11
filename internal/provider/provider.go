@@ -11,6 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/sbresin/terraform-provider-salesforce/internal/client"
+	"github.com/sbresin/terraform-provider-salesforce/internal/metadata"
+	"github.com/sbresin/terraform-provider-salesforce/internal/uploader"
 )
 
 var _ provider.Provider = &SalesforceProvider{}
@@ -25,6 +27,14 @@ type SalesforceProviderModel struct {
 	ClientSecret types.String `tfsdk:"client_secret"`
 	AuthURL      types.String `tfsdk:"auth_url"`
 	APIVersion   types.String `tfsdk:"api_version"`
+}
+
+// ProviderClients holds all API clients for resources and data sources.
+type ProviderClients struct {
+	REST     *client.Client
+	Metadata *metadata.Client
+	Uploader *uploader.Uploader
+	Session  *client.SessionCredentials
 }
 
 func New(version string) func() provider.Provider {
@@ -173,16 +183,47 @@ func (p *SalesforceProvider) Configure(ctx context.Context, req provider.Configu
 		tokenSource = client.NewClientCredentialsTokenSource(instanceURL, clientID, clientSecret)
 	}
 
-	// Create the Salesforce client
-	sfClient := client.NewClient(client.Config{
+	// Create the REST client
+	restClient := client.NewClient(client.Config{
 		InstanceURL: resolvedInstanceURL,
 		APIVersion:  apiVersion,
 		TokenSource: tokenSource,
 	})
 
-	// Make client available to data sources and resources
-	resp.DataSourceData = sfClient
-	resp.ResourceData = sfClient
+	// Create session source for UI/SOAP operations
+	sessionSource := client.NewSessionSource(tokenSource, resolvedInstanceURL)
+
+	// Get session credentials
+	session, err := sessionSource.Session(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Session Establishment Failed",
+			"Unable to establish Salesforce session: "+err.Error(),
+		)
+		return
+	}
+
+	// Create metadata client
+	// Use "67.0" for metadata API (no "v" prefix, different from REST API)
+	metadataAPIVersion := "67.0"
+	metaClient := metadata.NewClient(
+		session.InstanceURL,
+		session.SessionID,
+		metadata.WithAPIVersion(metadataAPIVersion),
+	)
+
+	// Create uploader for certificate uploads
+	certUploader := uploader.NewUploader(session.InstanceURL, session.Cookies)
+
+	// Make clients available to data sources and resources
+	clients := &ProviderClients{
+		REST:     restClient,
+		Metadata: metaClient,
+		Uploader: certUploader,
+		Session:  session,
+	}
+	resp.DataSourceData = clients
+	resp.ResourceData = clients
 }
 
 func (p *SalesforceProvider) DataSources(_ context.Context) []func() datasource.DataSource {
