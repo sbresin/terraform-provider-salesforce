@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/sbresin/terraform-provider-salesforce/internal/certutil"
+	"github.com/sbresin/terraform-provider-salesforce/internal/metadata"
 )
 
 var _ resource.Resource = &SelfSignedCertResource{}
@@ -107,23 +110,90 @@ func (r *SelfSignedCertResource) Configure(_ context.Context, req resource.Confi
 	r.clients = clients
 }
 
-func (r *SelfSignedCertResource) Create(_ context.Context, _ resource.CreateRequest, resp *resource.CreateResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Create for salesforce_self_signed_cert will be implemented in a later task.")
+func (r *SelfSignedCertResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan selfSignedCertResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	masterLabel := plan.MasterLabel.ValueString()
+	if masterLabel == "" {
+		masterLabel = plan.DeveloperName.ValueString()
+	}
+
+	deployID, err := r.clients.Metadata.CreateCertificate(ctx, metadata.CertificateCreate{
+		FullName:             plan.DeveloperName.ValueString(),
+		MasterLabel:          masterLabel,
+		KeySize:              int(plan.KeySize.ValueInt64()),
+		PrivateKeyExportable: plan.PrivateKeyExportable.ValueBool(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Error Creating Certificate", err.Error())
+		return
+	}
+	if _, err := r.clients.Metadata.WaitForDeploy(ctx, deployID); err != nil {
+		resp.Diagnostics.AddError("Certificate Deployment Failed", err.Error())
+		return
+	}
+
+	state, err := r.readState(ctx, plan.DeveloperName.ValueString(), plan.EarlyRenewalHours.ValueInt64())
+	if err != nil {
+		resp.Diagnostics.AddError("Error Reading Created Certificate", err.Error())
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
-func (r *SelfSignedCertResource) Read(_ context.Context, _ resource.ReadRequest, resp *resource.ReadResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Read for salesforce_self_signed_cert will be implemented in a later task.")
+func (r *SelfSignedCertResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state selfSignedCertResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	newState, err := r.readState(ctx, state.DeveloperName.ValueString(), state.EarlyRenewalHours.ValueInt64())
+	if err != nil {
+		if errors.Is(err, metadata.ErrNotFound) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError("Error Reading Certificate", err.Error())
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }
 
 func (r *SelfSignedCertResource) Update(_ context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Update for salesforce_self_signed_cert will be implemented in a later task.")
+	resp.Diagnostics.AddError("Unsupported Update", "salesforce_self_signed_cert uses replacement for all mutable Salesforce certificate fields.")
 }
 
-func (r *SelfSignedCertResource) Delete(_ context.Context, _ resource.DeleteRequest, resp *resource.DeleteResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Delete for salesforce_self_signed_cert will be implemented in a later task.")
+func (r *SelfSignedCertResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state selfSignedCertResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	deployID, err := r.clients.Metadata.DeleteCertificate(ctx, state.DeveloperName.ValueString())
+	if err != nil {
+		if errors.Is(err, metadata.ErrNotFound) {
+			return
+		}
+		resp.Diagnostics.AddError("Error Deleting Certificate", err.Error())
+		return
+	}
+	if _, err := r.clients.Metadata.WaitForDeploy(ctx, deployID); err != nil {
+		resp.Diagnostics.AddError("Certificate Delete Deployment Failed", err.Error())
+		return
+	}
 }
 
 func (r *SelfSignedCertResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() {
+		return
+	}
+
 	var state selfSignedCertResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() || state.ID.IsNull() || state.ID.IsUnknown() {
@@ -156,4 +226,46 @@ func readyForRenewal(now time.Time, expirationDate string, earlyRenewalHours int
 	}
 	renewalTime := expires.UTC().Add(-time.Duration(earlyRenewalHours) * time.Hour)
 	return !now.Before(renewalTime), nil
+}
+
+func (r *SelfSignedCertResource) readState(ctx context.Context, developerName string, earlyRenewalHours int64) (*selfSignedCertResourceModel, error) {
+	cert, err := r.clients.Metadata.ReadCertificate(ctx, developerName)
+	if err != nil {
+		return nil, err
+	}
+
+	certPEM, err := certutil.NormalizePEMFromSalesforce(cert.Certificate)
+	if err != nil {
+		return nil, err
+	}
+	sha256, err := certutil.LeafSHA256(certPEM)
+	if err != nil {
+		return nil, err
+	}
+
+	expirationDate := ""
+	if cert.ExpirationDate != nil {
+		expirationDate = cert.ExpirationDate.Format("2006-01-02")
+	}
+	ready := false
+	if expirationDate != "" {
+		ready, err = readyForRenewal(time.Now().UTC(), expirationDate, earlyRenewalHours)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &selfSignedCertResourceModel{
+		ID:                   types.StringValue(cert.FullName),
+		DeveloperName:        types.StringValue(cert.FullName),
+		MasterLabel:          types.StringValue(cert.MasterLabel),
+		KeySize:              types.Int64Value(int64(cert.KeySize)),
+		PrivateKeyExportable: types.BoolValue(cert.PrivateKeyExportable),
+		EarlyRenewalHours:    types.Int64Value(earlyRenewalHours),
+		CertPEM:              types.StringValue(certPEM),
+		CertSHA256:           types.StringValue(sha256),
+		ExpirationDate:       types.StringValue(expirationDate),
+		ReadyForRenewal:      types.BoolValue(ready),
+		Platform:             types.BoolValue(cert.Platform),
+	}, nil
 }
