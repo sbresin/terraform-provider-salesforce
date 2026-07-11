@@ -46,7 +46,7 @@ func (d *CertificateDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 				Required:    true,
 			},
 			"id": schema.StringAttribute{
-				Description: "The Salesforce ID of the certificate.",
+				Description: "The developer name (API name) of the certificate.",
 				Computed:    true,
 			},
 			"master_label": schema.StringAttribute{

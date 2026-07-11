@@ -109,6 +109,7 @@ data "salesforce_certificate" "test" {
 					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "is_private_key_exportable", "false"),
 					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "key_size", "2048"),
 					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "certificate", "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t"),
+					resource.TestCheckResourceAttr("data.salesforce_certificate.test", "platform", "false"),
 				),
 			},
 		},

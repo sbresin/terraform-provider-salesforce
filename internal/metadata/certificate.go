@@ -5,6 +5,8 @@ import (
 	"encoding/xml"
 	"fmt"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // ReadCertificate reads a single certificate by its fullName (developer name).
@@ -48,6 +50,13 @@ func (c *Client) ReadCertificate(ctx context.Context, fullName string) (*Certifi
 		t, err := time.Parse("2006-01-02", record.ExpirationDate)
 		if err == nil {
 			cert.ExpirationDate = &t
+		} else {
+			tflog.Warn(ctx, "failed to parse certificate expiration date",
+				map[string]interface{}{
+					"fullName":       record.FullName,
+					"expirationDate": record.ExpirationDate,
+					"error":          err.Error(),
+				})
 		}
 	}
 

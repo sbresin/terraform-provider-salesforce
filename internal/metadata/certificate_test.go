@@ -153,9 +153,7 @@ func TestClient_ListCertificates(t *testing.T) {
 
 func TestClient_DeleteCertificate(t *testing.T) {
 	t.Run("successful delete", func(t *testing.T) {
-		requestCount := 0
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			requestCount++
 			w.Header().Set("Content-Type", "text/xml")
 
 			body, _ := io.ReadAll(r.Body)

@@ -25,7 +25,6 @@ type SessionCredentials struct {
 type sessionSource struct {
 	tokenSource TokenSource
 	instanceURL string
-	httpClient  *http.Client
 }
 
 // NewSessionSource creates a SessionSource that exchanges OAuth tokens for session cookies.
@@ -35,7 +34,6 @@ func NewSessionSource(tokenSource TokenSource, instanceURL string) SessionSource
 	return &sessionSource{
 		tokenSource: tokenSource,
 		instanceURL: instanceURL,
-		httpClient:  http.DefaultClient,
 	}
 }
 
@@ -92,7 +90,7 @@ func (s *sessionSource) getFrontdoorURL(ctx context.Context, accessToken string)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("executing request: %w", err)
 	}
