@@ -43,7 +43,31 @@ Generate with: `sf org auth show-sfdx-auth-url -o <alias> --no-prompt`
 
 ## Data Sources
 
-- [salesforce_certificate](data-sources/certificate.md) - Read certificate information
+### salesforce_certificate
+
+Retrieves information about a Salesforce Certificate.
+
+**Arguments:**
+- `developer_name` (Required) - The developer name (API name) of the certificate
+
+**Attributes:**
+- `id` - The Salesforce ID of the certificate
+- `master_label` - The human-readable label
+- `expiration_date` - The expiration date (YYYY-MM-DD format)
+- `is_private_key_exportable` - Whether the private key can be exported
+- `key_size` - The key size in bits (e.g., 2048, 4096)
+
+**Example:**
+
+```hcl
+data "salesforce_certificate" "integration" {
+  developer_name = "IntegrationCertificate"
+}
+
+output "cert_expiration" {
+  value = data.salesforce_certificate.integration.expiration_date
+}
+```
 
 ## Provider Attributes
 
