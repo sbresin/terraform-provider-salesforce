@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -15,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/sbresin/terraform-provider-salesforce/internal/certutil"
 	"github.com/sbresin/terraform-provider-salesforce/internal/metadata"
@@ -72,6 +74,9 @@ func (r *SelfSignedCertResource) Schema(_ context.Context, _ resource.SchemaRequ
 				Optional: true,
 				Computed: true,
 				Default:  int64default.StaticInt64(2048),
+				Validators: []validator.Int64{
+					int64validator.OneOf(2048, 4096),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.RequiresReplace(),
 				},
@@ -88,6 +93,9 @@ func (r *SelfSignedCertResource) Schema(_ context.Context, _ resource.SchemaRequ
 				Optional: true,
 				Computed: true,
 				Default:  int64default.StaticInt64(0),
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 			},
 			"cert_pem":          schema.StringAttribute{Computed: true},
 			"cert_sha256":       schema.StringAttribute{Computed: true},
@@ -164,8 +172,22 @@ func (r *SelfSignedCertResource) Read(ctx context.Context, req resource.ReadRequ
 	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }
 
-func (r *SelfSignedCertResource) Update(_ context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Unsupported Update", "salesforce_self_signed_cert uses replacement for all mutable Salesforce certificate fields.")
+func (r *SelfSignedCertResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	// The only mutable attribute without RequiresReplace is early_renewal_hours.
+	// This attribute is purely Terraform-side state; changing it does not require
+	// any Salesforce API call. We simply read the planned value and refresh state.
+	var plan selfSignedCertResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	state, err := r.readState(ctx, plan.DeveloperName.ValueString(), plan.EarlyRenewalHours.ValueInt64())
+	if err != nil {
+		resp.Diagnostics.AddError("Error Reading Certificate During Update", err.Error())
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 func (r *SelfSignedCertResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -190,7 +212,8 @@ func (r *SelfSignedCertResource) Delete(ctx context.Context, req resource.Delete
 }
 
 func (r *SelfSignedCertResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if req.State.Raw.IsNull() {
+	// Skip if creating (no prior state) or destroying (no plan)
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
 		return
 	}
 
@@ -204,9 +227,17 @@ func (r *SelfSignedCertResource) ModifyPlan(ctx context.Context, req resource.Mo
 		return
 	}
 
+	// Read planned early_renewal_hours to check against the renewal window.
+	// This ensures that increasing early_renewal_hours into the window triggers replacement.
+	var plan selfSignedCertResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	early := int64(0)
-	if !state.EarlyRenewalHours.IsNull() && !state.EarlyRenewalHours.IsUnknown() {
-		early = state.EarlyRenewalHours.ValueInt64()
+	if !plan.EarlyRenewalHours.IsNull() && !plan.EarlyRenewalHours.IsUnknown() {
+		early = plan.EarlyRenewalHours.ValueInt64()
 	}
 
 	ready, err := readyForRenewal(time.Now().UTC(), state.ExpirationDate.ValueString(), early)

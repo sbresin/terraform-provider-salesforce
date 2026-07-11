@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -204,8 +205,8 @@ func (p *SalesforceProvider) Configure(ctx context.Context, req provider.Configu
 	}
 
 	// Create metadata client
-	// Use "67.0" for metadata API (no "v" prefix, different from REST API)
-	metadataAPIVersion := "67.0"
+	// Metadata API uses version without "v" prefix (e.g., "61.0" not "v61.0")
+	metadataAPIVersion := strings.TrimPrefix(apiVersion, "v")
 	metaClient := metadata.NewClient(
 		session.InstanceURL,
 		session.SessionID,

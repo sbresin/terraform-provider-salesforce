@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -187,6 +188,136 @@ resource "salesforce_self_signed_cert" "test" {
 				),
 			},
 		},
+	})
+}
+
+func TestSelfSignedCertResource_UpdateEarlyRenewalHours(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/services/oauth2/token":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "test-token"})
+		case r.URL.Path == "/services/oauth2/singleaccess":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"frontdoor_uri": serverURL + "/secur/frontdoor.jsp?otp=abc"})
+		case r.URL.Path == "/secur/frontdoor.jsp":
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "test-session-id"})
+			w.WriteHeader(http.StatusOK)
+		case strings.HasPrefix(r.URL.Path, "/services/Soap/m/"):
+			bodyBytes, _ := io.ReadAll(r.Body)
+			body := string(bodyBytes)
+			w.Header().Set("Content-Type", "text/xml")
+			switch {
+			case strings.Contains(body, "checkDeployStatus"):
+				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><checkDeployStatusResponse><result><id>0AfCreate</id><done>true</done><success>true</success><status>Succeeded</status></result></checkDeployStatusResponse></soapenv:Body></soapenv:Envelope>`))
+			case strings.Contains(body, "readMetadata"):
+				cert := base64.StdEncoding.EncodeToString([]byte(testCertPEM))
+				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><readMetadataResponse><result><records><fullName>TerraformUpdateTest</fullName><masterLabel>Update Test Cert</masterLabel><certificate>` + cert + `</certificate><expirationDate>2027-07-11</expirationDate><keySize>2048</keySize><platform>false</platform><privateKeyExportable>false</privateKeyExportable></records></result></readMetadataResponse></soapenv:Body></soapenv:Envelope>`))
+			case strings.Contains(body, "deploy"):
+				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><deployResponse><result><id>0AfCreate</id><done>false</done><state>Queued</state></result></deployResponse></soapenv:Body></soapenv:Envelope>`))
+			default:
+				t.Fatalf("unexpected SOAP request: %s", body)
+			}
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+
+	t.Setenv("SALESFORCE_INSTANCE_URL", server.URL)
+	t.Setenv("SALESFORCE_CLIENT_ID", "test-client-id")
+	t.Setenv("SALESFORCE_CLIENT_SECRET", "test-client-secret")
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "salesforce_self_signed_cert" "test" {
+  developer_name      = "TerraformUpdateTest"
+  master_label        = "Update Test Cert"
+  early_renewal_hours = 0
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("salesforce_self_signed_cert.test", "early_renewal_hours", "0"),
+				),
+			},
+			{
+				// Update early_renewal_hours (no Salesforce API mutation needed)
+				Config: `
+resource "salesforce_self_signed_cert" "test" {
+  developer_name      = "TerraformUpdateTest"
+  master_label        = "Update Test Cert"
+  early_renewal_hours = 720
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("salesforce_self_signed_cert.test", "early_renewal_hours", "720"),
+				),
+			},
+		},
+	})
+}
+
+func TestSelfSignedCertResource_ValidationErrors(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/services/oauth2/token":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "test-token"})
+		case r.URL.Path == "/services/oauth2/singleaccess":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"frontdoor_uri": serverURL + "/secur/frontdoor.jsp?otp=abc"})
+		case r.URL.Path == "/secur/frontdoor.jsp":
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "test-session-id"})
+			w.WriteHeader(http.StatusOK)
+		default:
+			// Should not reach here for invalid config
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+
+	t.Setenv("SALESFORCE_INSTANCE_URL", server.URL)
+	t.Setenv("SALESFORCE_CLIENT_ID", "test-client-id")
+	t.Setenv("SALESFORCE_CLIENT_SECRET", "test-client-secret")
+
+	t.Run("negative early_renewal_hours", func(t *testing.T) {
+		resource.UnitTest(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+			Steps: []resource.TestStep{
+				{
+					Config: `
+resource "salesforce_self_signed_cert" "test" {
+  developer_name      = "TestNegativeEarly"
+  early_renewal_hours = -1
+}
+`,
+					ExpectError: regexp.MustCompile(`must be at least 0`),
+				},
+			},
+		})
+	})
+
+	t.Run("invalid key_size", func(t *testing.T) {
+		resource.UnitTest(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+			Steps: []resource.TestStep{
+				{
+					Config: `
+resource "salesforce_self_signed_cert" "test" {
+  developer_name = "TestInvalidKeySize"
+  key_size       = 1024
+}
+`,
+					ExpectError: regexp.MustCompile(`must be one of`),
+				},
+			},
+		})
 	})
 }
 

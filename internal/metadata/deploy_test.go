@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -266,6 +267,60 @@ func TestWaitForDeploy_Failure(t *testing.T) {
 	_, err := client.WaitForDeploy(context.Background(), "0AfTest")
 	if err == nil || !strings.Contains(err.Error(), "bad cert") {
 		t.Fatalf("expected failure containing bad cert, got %v", err)
+	}
+
+	// Verify we get a DeployError
+	var deployErr *DeployError
+	if !errors.As(err, &deployErr) {
+		t.Fatal("expected DeployError type")
+	}
+	if deployErr.ErrorMessage != "bad cert" {
+		t.Errorf("expected ErrorMessage 'bad cert', got %q", deployErr.ErrorMessage)
+	}
+}
+
+func TestWaitForDeploy_ComponentFailure(t *testing.T) {
+	client, server := newTestMetadataClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/xml")
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body><checkDeployStatusResponse><result>
+    <id>0AfTest</id>
+    <done>true</done>
+    <success>false</success>
+    <status>Failed</status>
+    <details>
+      <componentFailures>
+        <fullName>MyCert</fullName>
+        <problem>Certificate in use by SSO</problem>
+        <problemType>Error</problemType>
+        <componentType>Certificate</componentType>
+      </componentFailures>
+    </details>
+  </result></checkDeployStatusResponse></soapenv:Body>
+</soapenv:Envelope>`))
+	})
+	defer server.Close()
+
+	_, err := client.WaitForDeploy(context.Background(), "0AfTest")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	// Verify we get a DeployError with component failures
+	var deployErr *DeployError
+	if !errors.As(err, &deployErr) {
+		t.Fatal("expected DeployError type")
+	}
+	if len(deployErr.ComponentErrors) != 1 {
+		t.Fatalf("expected 1 component error, got %d", len(deployErr.ComponentErrors))
+	}
+	if deployErr.ComponentErrors[0].Problem != "Certificate in use by SSO" {
+		t.Errorf("unexpected problem: %q", deployErr.ComponentErrors[0].Problem)
+	}
+	// Error message should include component failure details
+	if !strings.Contains(err.Error(), "MyCert") || !strings.Contains(err.Error(), "Certificate in use by SSO") {
+		t.Errorf("error message should include component failure details: %v", err)
 	}
 }
 

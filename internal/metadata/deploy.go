@@ -66,10 +66,13 @@ func (c *Client) WaitForDeploy(ctx context.Context, deployID string) (*DeployRes
 			if result.Success {
 				return result, nil
 			}
-			if result.ErrorMessage != "" {
-				return result, fmt.Errorf("deployment %s failed: %s", deployID, result.ErrorMessage)
+			// Return a DeployError that includes component failures for diagnostics
+			return result, &DeployError{
+				ID:              deployID,
+				Status:          result.Status,
+				ErrorMessage:    result.ErrorMessage,
+				ComponentErrors: result.ComponentFailures,
 			}
-			return result, fmt.Errorf("deployment %s failed with status %s", deployID, result.Status)
 		}
 
 		select {
