@@ -71,7 +71,7 @@ func TestCertificateDataSource_Read(t *testing.T) {
           <content>LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t</content>
           <expirationDate>2025-12-31</expirationDate>
           <keySize>2048</keySize>
-          <platform>false</platform>
+          <encryptedWithPlatformEncryption>false</encryptedWithPlatformEncryption>
           <privateKeyExportable>false</privateKeyExportable>
         </records>
       </result>
@@ -109,7 +109,7 @@ data "salesforce_cert" "test" {
 					resource.TestCheckResourceAttr("data.salesforce_cert.test", "is_private_key_exportable", "false"),
 					resource.TestCheckResourceAttr("data.salesforce_cert.test", "key_size", "2048"),
 					resource.TestCheckResourceAttr("data.salesforce_cert.test", "certificate", "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t"),
-					resource.TestCheckResourceAttr("data.salesforce_cert.test", "platform", "false"),
+					resource.TestCheckResourceAttr("data.salesforce_cert.test", "encrypted_with_platform_encryption", "false"),
 				),
 			},
 		},

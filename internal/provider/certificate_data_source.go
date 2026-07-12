@@ -19,14 +19,14 @@ type CertificateDataSource struct {
 }
 
 type CertificateDataSourceModel struct {
-	ID                     types.String `tfsdk:"id"`
-	DeveloperName          types.String `tfsdk:"developer_name"`
-	MasterLabel            types.String `tfsdk:"master_label"`
-	ExpirationDate         types.String `tfsdk:"expiration_date"`
-	IsPrivateKeyExportable types.Bool   `tfsdk:"is_private_key_exportable"`
-	KeySize                types.Int64  `tfsdk:"key_size"`
-	Certificate            types.String `tfsdk:"certificate"`
-	Platform               types.Bool   `tfsdk:"platform"`
+	ID                              types.String `tfsdk:"id"`
+	DeveloperName                   types.String `tfsdk:"developer_name"`
+	MasterLabel                     types.String `tfsdk:"master_label"`
+	ExpirationDate                  types.String `tfsdk:"expiration_date"`
+	IsPrivateKeyExportable          types.Bool   `tfsdk:"is_private_key_exportable"`
+	KeySize                         types.Int64  `tfsdk:"key_size"`
+	Certificate                     types.String `tfsdk:"certificate"`
+	EncryptedWithPlatformEncryption types.Bool   `tfsdk:"encrypted_with_platform_encryption"`
 }
 
 func NewCertificateDataSource() datasource.DataSource {
@@ -69,8 +69,8 @@ func (d *CertificateDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 				Description: "The certificate chain in base64-encoded PEM format.",
 				Computed:    true,
 			},
-			"platform": schema.BoolAttribute{
-				Description: "Whether this is a platform certificate.",
+			"encrypted_with_platform_encryption": schema.BoolAttribute{
+				Description: "Whether this certificate is encrypted with Platform Encryption.",
 				Computed:    true,
 			},
 		},
@@ -127,7 +127,7 @@ func (d *CertificateDataSource) Read(ctx context.Context, req datasource.ReadReq
 	data.Certificate = types.StringValue(cert.Certificate)
 	data.KeySize = types.Int64Value(int64(cert.KeySize))
 	data.IsPrivateKeyExportable = types.BoolValue(cert.PrivateKeyExportable)
-	data.Platform = types.BoolValue(cert.Platform)
+	data.EncryptedWithPlatformEncryption = types.BoolValue(cert.EncryptedWithPlatformEncryption)
 
 	if cert.ExpirationDate != nil {
 		data.ExpirationDate = types.StringValue(cert.ExpirationDate.Format("2006-01-02"))

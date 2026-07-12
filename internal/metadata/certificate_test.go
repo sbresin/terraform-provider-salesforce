@@ -27,7 +27,7 @@ func TestClient_ReadCertificate(t *testing.T) {
           <content>LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t</content>
           <expirationDate>2025-12-31</expirationDate>
           <keySize>2048</keySize>
-          <platform>false</platform>
+          <encryptedWithPlatformEncryption>false</encryptedWithPlatformEncryption>
           <privateKeyExportable>true</privateKeyExportable>
         </records>
       </result>

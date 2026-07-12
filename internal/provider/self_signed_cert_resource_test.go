@@ -98,7 +98,7 @@ func TestSelfSignedCertResource_CreateReadDelete(t *testing.T) {
 				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><checkDeployStatusResponse><result><id>0AfCreate</id><done>true</done><success>true</success><status>Succeeded</status></result></checkDeployStatusResponse></soapenv:Body></soapenv:Envelope>`))
 			case strings.Contains(body, "readMetadata"):
 				cert := base64.StdEncoding.EncodeToString([]byte(testCertPEM))
-				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><readMetadataResponse><result><records><fullName>TerraformE2ETestCert</fullName><masterLabel>Terraform E2E Test Cert</masterLabel><content>` + cert + `</content><expirationDate>2027-07-11</expirationDate><keySize>2048</keySize><platform>false</platform><privateKeyExportable>false</privateKeyExportable></records></result></readMetadataResponse></soapenv:Body></soapenv:Envelope>`))
+				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><readMetadataResponse><result><records><fullName>TerraformE2ETestCert</fullName><masterLabel>Terraform E2E Test Cert</masterLabel><content>` + cert + `</content><expirationDate>2027-07-11</expirationDate><keySize>2048</keySize><encryptedWithPlatformEncryption>false</encryptedWithPlatformEncryption><privateKeyExportable>false</privateKeyExportable></records></result></readMetadataResponse></soapenv:Body></soapenv:Envelope>`))
 			case strings.Contains(body, "deploy"):
 				deployZip, err := readDeployZip(body)
 				if err != nil {
@@ -213,7 +213,7 @@ func TestSelfSignedCertResource_UpdateEarlyRenewalHours(t *testing.T) {
 				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><checkDeployStatusResponse><result><id>0AfCreate</id><done>true</done><success>true</success><status>Succeeded</status></result></checkDeployStatusResponse></soapenv:Body></soapenv:Envelope>`))
 			case strings.Contains(body, "readMetadata"):
 				cert := base64.StdEncoding.EncodeToString([]byte(testCertPEM))
-				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><readMetadataResponse><result><records><fullName>TerraformUpdateTest</fullName><masterLabel>Update Test Cert</masterLabel><content>` + cert + `</content><expirationDate>2027-07-11</expirationDate><keySize>2048</keySize><platform>false</platform><privateKeyExportable>false</privateKeyExportable></records></result></readMetadataResponse></soapenv:Body></soapenv:Envelope>`))
+				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><readMetadataResponse><result><records><fullName>TerraformUpdateTest</fullName><masterLabel>Update Test Cert</masterLabel><content>` + cert + `</content><expirationDate>2027-07-11</expirationDate><keySize>2048</keySize><encryptedWithPlatformEncryption>false</encryptedWithPlatformEncryption><privateKeyExportable>false</privateKeyExportable></records></result></readMetadataResponse></soapenv:Body></soapenv:Envelope>`))
 			case strings.Contains(body, "deploy"):
 				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><deployResponse><result><id>0AfCreate</id><done>false</done><state>Queued</state></result></deployResponse></soapenv:Body></soapenv:Envelope>`))
 			default:
@@ -343,7 +343,7 @@ func TestSelfSignedCertResource_Import(t *testing.T) {
 				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><checkDeployStatusResponse><result><id>0AfCreate</id><done>true</done><success>true</success><status>Succeeded</status></result></checkDeployStatusResponse></soapenv:Body></soapenv:Envelope>`))
 			case strings.Contains(body, "readMetadata"):
 				cert := base64.StdEncoding.EncodeToString([]byte(testCertPEM))
-				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><readMetadataResponse><result><records><fullName>ImportTestCert</fullName><masterLabel>Import Test Cert</masterLabel><content>` + cert + `</content><expirationDate>2027-07-11</expirationDate><keySize>2048</keySize><platform>false</platform><privateKeyExportable>false</privateKeyExportable></records></result></readMetadataResponse></soapenv:Body></soapenv:Envelope>`))
+				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><readMetadataResponse><result><records><fullName>ImportTestCert</fullName><masterLabel>Import Test Cert</masterLabel><content>` + cert + `</content><expirationDate>2027-07-11</expirationDate><keySize>2048</keySize><encryptedWithPlatformEncryption>false</encryptedWithPlatformEncryption><privateKeyExportable>false</privateKeyExportable></records></result></readMetadataResponse></soapenv:Body></soapenv:Envelope>`))
 			case strings.Contains(body, "deploy"):
 				w.Write([]byte(`<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><deployResponse><result><id>0AfCreate</id><done>false</done><state>Queued</state></result></deployResponse></soapenv:Body></soapenv:Envelope>`))
 			default:

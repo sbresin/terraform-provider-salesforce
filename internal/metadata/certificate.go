@@ -56,12 +56,13 @@ func (c *Client) ReadCertificate(ctx context.Context, fullName string) (*Certifi
 		return nil, ErrNotFound
 	}
 	cert := &Certificate{
-		FullName:             record.FullName,
-		MasterLabel:          record.MasterLabel,
-		Certificate:          record.Certificate,
-		KeySize:              record.KeySize,
-		Platform:             record.Platform,
-		PrivateKeyExportable: record.PrivateKeyExportable,
+		FullName:                        record.FullName,
+		MasterLabel:                     record.MasterLabel,
+		Certificate:                     record.Certificate,
+		CaSigned:                        record.CaSigned,
+		EncryptedWithPlatformEncryption: record.EncryptedWithPlatformEncryption,
+		KeySize:                         record.KeySize,
+		PrivateKeyExportable:            record.PrivateKeyExportable,
 	}
 
 	// Parse expiration date if present
@@ -161,6 +162,7 @@ func buildCertificateDeployZip(cert CertificateCreate, apiVersion string) ([]byt
 
 	certXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <Certificate xmlns="http://soap.sforce.com/2006/04/metadata">
+    <caSigned>false</caSigned>
     <keySize>%d</keySize>
     <masterLabel>%s</masterLabel>
     <privateKeyExportable>%t</privateKeyExportable>

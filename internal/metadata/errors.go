@@ -34,17 +34,33 @@ type DeployError struct {
 	ID              string
 	Status          string
 	ErrorMessage    string
+	ErrorStatusCode string
 	ComponentErrors []ComponentFailure
 }
 
 func (e *DeployError) Error() string {
 	if e.ErrorMessage != "" {
+		if e.ErrorStatusCode != "" {
+			return fmt.Sprintf("deploy failed (ID=%s, status=%s, code=%s): %s",
+				e.ID, e.Status, e.ErrorStatusCode, e.ErrorMessage)
+		}
 		return fmt.Sprintf("deploy failed (ID=%s, status=%s): %s", e.ID, e.Status, e.ErrorMessage)
 	}
 	if len(e.ComponentErrors) > 0 {
 		var problems []string
 		for _, ce := range e.ComponentErrors {
-			problems = append(problems, fmt.Sprintf("%s: %s", ce.FullName, ce.Problem))
+			loc := ce.FullName
+			if ce.FileName != "" {
+				loc = ce.FileName
+				if ce.LineNumber > 0 {
+					if ce.ColumnNumber > 0 {
+						loc = fmt.Sprintf("%s:%d:%d", ce.FileName, ce.LineNumber, ce.ColumnNumber)
+					} else {
+						loc = fmt.Sprintf("%s:%d", ce.FileName, ce.LineNumber)
+					}
+				}
+			}
+			problems = append(problems, fmt.Sprintf("%s: %s", loc, ce.Problem))
 		}
 		return fmt.Sprintf("deploy failed (ID=%s, status=%s): %s", e.ID, e.Status, strings.Join(problems, "; "))
 	}

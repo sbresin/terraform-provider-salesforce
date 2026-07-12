@@ -71,6 +71,7 @@ func (c *Client) WaitForDeploy(ctx context.Context, deployID string) (*DeployRes
 				ID:              deployID,
 				Status:          result.Status,
 				ErrorMessage:    result.ErrorMessage,
+				ErrorStatusCode: result.ErrorStatusCode,
 				ComponentErrors: result.ComponentFailures,
 			}
 		}

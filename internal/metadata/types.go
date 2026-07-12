@@ -108,13 +108,14 @@ type ReadMetadataResponse struct {
 
 // CertificateRecord is the raw certificate data from the API.
 type CertificateRecord struct {
-	FullName             string `xml:"fullName"`
-	MasterLabel          string `xml:"masterLabel"`
-	Certificate          string `xml:"content"` // base64-encoded PEM (Salesforce returns this as "content")
-	ExpirationDate       string `xml:"expirationDate,omitempty"`
-	KeySize              int    `xml:"keySize,omitempty"`
-	Platform             bool   `xml:"platform,omitempty"`
-	PrivateKeyExportable bool   `xml:"privateKeyExportable,omitempty"`
+	FullName                        string `xml:"fullName"`
+	MasterLabel                     string `xml:"masterLabel"`
+	Certificate                     string `xml:"content"` // base64-encoded PEM (Salesforce returns this as "content")
+	CaSigned                        bool   `xml:"caSigned,omitempty"`
+	EncryptedWithPlatformEncryption bool   `xml:"encryptedWithPlatformEncryption,omitempty"`
+	ExpirationDate                  string `xml:"expirationDate,omitempty"`
+	KeySize                         int    `xml:"keySize,omitempty"`
+	PrivateKeyExportable            bool   `xml:"privateKeyExportable,omitempty"`
 }
 
 // ListMetadataResponse wraps the listMetadata response.
@@ -155,6 +156,7 @@ type DeployResult struct {
 	Success                  bool               `xml:"success"`
 	Status                   string             `xml:"status"`
 	ErrorMessage             string             `xml:"errorMessage,omitempty"`
+	ErrorStatusCode          string             `xml:"errorStatusCode,omitempty"`
 	ComponentFailures        []ComponentFailure `xml:"details>componentFailures,omitempty"`
 	NumberComponentsTotal    int                `xml:"numberComponentsTotal,omitempty"`
 	NumberComponentsDeployed int                `xml:"numberComponentsDeployed,omitempty"`
@@ -164,9 +166,12 @@ type DeployResult struct {
 // ComponentFailure describes a failed component in a deployment.
 type ComponentFailure struct {
 	FullName      string `xml:"fullName"`
+	FileName      string `xml:"fileName,omitempty"`
 	Problem       string `xml:"problem"`
 	ProblemType   string `xml:"problemType"`
 	ComponentType string `xml:"componentType"`
+	LineNumber    int    `xml:"lineNumber,omitempty"`
+	ColumnNumber  int    `xml:"columnNumber,omitempty"`
 }
 
 // --- Public types ---
@@ -180,11 +185,12 @@ type CertificateCreate struct {
 
 // Certificate represents a Salesforce certificate with all metadata.
 type Certificate struct {
-	FullName             string
-	MasterLabel          string
-	Certificate          string // base64-encoded PEM certificate chain
-	ExpirationDate       *time.Time
-	KeySize              int
-	Platform             bool
-	PrivateKeyExportable bool
+	FullName                        string
+	MasterLabel                     string
+	Certificate                     string // base64-encoded PEM certificate chain
+	CaSigned                        bool
+	EncryptedWithPlatformEncryption bool
+	ExpirationDate                  *time.Time
+	KeySize                         int
+	PrivateKeyExportable            bool
 }

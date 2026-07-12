@@ -32,17 +32,17 @@ type SelfSignedCertResource struct {
 }
 
 type selfSignedCertResourceModel struct {
-	ID                   types.String `tfsdk:"id"`
-	DeveloperName        types.String `tfsdk:"developer_name"`
-	MasterLabel          types.String `tfsdk:"master_label"`
-	KeySize              types.Int64  `tfsdk:"key_size"`
-	PrivateKeyExportable types.Bool   `tfsdk:"private_key_exportable"`
-	EarlyRenewalHours    types.Int64  `tfsdk:"early_renewal_hours"`
-	CertPEM              types.String `tfsdk:"cert_pem"`
-	CertSHA256           types.String `tfsdk:"cert_sha256"`
-	ExpirationDate       types.String `tfsdk:"expiration_date"`
-	ReadyForRenewal      types.Bool   `tfsdk:"ready_for_renewal"`
-	Platform             types.Bool   `tfsdk:"platform"`
+	ID                              types.String `tfsdk:"id"`
+	DeveloperName                   types.String `tfsdk:"developer_name"`
+	MasterLabel                     types.String `tfsdk:"master_label"`
+	KeySize                         types.Int64  `tfsdk:"key_size"`
+	PrivateKeyExportable            types.Bool   `tfsdk:"private_key_exportable"`
+	EarlyRenewalHours               types.Int64  `tfsdk:"early_renewal_hours"`
+	CertPEM                         types.String `tfsdk:"cert_pem"`
+	CertSHA256                      types.String `tfsdk:"cert_sha256"`
+	ExpirationDate                  types.String `tfsdk:"expiration_date"`
+	ReadyForRenewal                 types.Bool   `tfsdk:"ready_for_renewal"`
+	EncryptedWithPlatformEncryption types.Bool   `tfsdk:"encrypted_with_platform_encryption"`
 }
 
 func NewSelfSignedCertResource() resource.Resource {
@@ -101,8 +101,8 @@ func (r *SelfSignedCertResource) Schema(_ context.Context, _ resource.SchemaRequ
 			"cert_pem":          schema.StringAttribute{Computed: true},
 			"cert_sha256":       schema.StringAttribute{Computed: true},
 			"expiration_date":   schema.StringAttribute{Computed: true},
-			"ready_for_renewal": schema.BoolAttribute{Computed: true},
-			"platform":          schema.BoolAttribute{Computed: true},
+			"ready_for_renewal":                 schema.BoolAttribute{Computed: true},
+			"encrypted_with_platform_encryption": schema.BoolAttribute{Computed: true},
 		},
 	}
 }
@@ -316,7 +316,7 @@ func (r *SelfSignedCertResource) readState(ctx context.Context, developerName st
 		CertPEM:              types.StringValue(certPEM),
 		CertSHA256:           types.StringValue(sha256),
 		ExpirationDate:       types.StringValue(expirationDate),
-		ReadyForRenewal:      types.BoolValue(ready),
-		Platform:             types.BoolValue(cert.Platform),
+		ReadyForRenewal:                 types.BoolValue(ready),
+		EncryptedWithPlatformEncryption: types.BoolValue(cert.EncryptedWithPlatformEncryption),
 	}, nil
 }
