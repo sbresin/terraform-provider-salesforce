@@ -19,3 +19,9 @@ coverage.out
 *.tfstate
 *.tfstate.*
 crash.log
+
+# POC / internal docs
+poc/
+docs/superpowers/
+docs/certificate-upload-spec.md
+docs/metadata-api*/
