@@ -5,7 +5,7 @@ A lean Terraform provider for interacting with Salesforce APIs.
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0
-- [Go](https://golang.org/doc/install) >= 1.22
+- [Go](https://go.dev/doc/install) >= 1.27 (to build from source)
 
 ## Building the Provider
 
@@ -93,23 +93,11 @@ Once `early_renewal_hours` before expiry, the next apply replaces the certificat
 
 Without credentials the provider still configures; only using a resource or data source fails. That lets a module use it in some environments only (`count = 0` elsewhere).
 
+Full reference: [docs/](docs/index.md) (published to the Terraform Registry).
+
 ## Development
 
-### Running Tests
-
-```bash
-# Unit tests
-make test
-
-# Acceptance tests (requires Salesforce credentials)
-TF_ACC=1 make testacc
-```
-
-### Linting
-
-```bash
-make lint
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for tests, lint, docs generation and the manual E2E test.
 
 ## License
 
