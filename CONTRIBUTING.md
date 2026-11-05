@@ -9,7 +9,9 @@ make vuln   # govulncheck
 make generate  # regenerate docs/ from templates/, examples/ and the schema; commit the result
 ```
 
-Acceptance tests (`make testacc`) need a real org via the `SALESFORCE_*` environment variables.
+Acceptance tests (`make testacc`) run against a real org using the `SALESFORCE_*`
+environment variables. They are **local only**: CI never sets `TF_ACC` and holds no
+Salesforce credentials, so never add any as repository secrets.
 
 ## Releasing
 
@@ -47,7 +49,7 @@ force://PlatformCLI::<refresh-token>@<instance>.my.salesforce.com
 #### 2. Build the Provider
 
 ```bash
-cd ~/workspace/terraform-provider-salesforce
+cd /path/to/terraform-provider-salesforce
 go build -o terraform-provider-salesforce
 ```
 
@@ -65,7 +67,7 @@ Create a temporary config file to use the local provider build:
 cat > /tmp/tf-dev-override.tfrc <<'EOF'
 provider_installation {
   dev_overrides {
-    "sbresin/salesforce" = "/home/sebe/workspace/terraform-provider-salesforce"
+    "sbresin/salesforce" = "/path/to/terraform-provider-salesforce"
   }
   direct {}
 }
@@ -76,7 +78,7 @@ EOF
 
 All commands should be run from:
 ```bash
-cd ~/workspace/terraform-provider-salesforce/examples/resources/salesforce_self_signed_cert
+cd /path/to/terraform-provider-salesforce/examples/resources/salesforce_self_signed_cert
 ```
 
 #### 1. Plan (Verify Provider Connects)
@@ -165,14 +167,14 @@ TF_CLI_CONFIG_FILE=/tmp/tf-dev-override.tfrc terraform destroy -auto-approve
 For a fast smoke test, run this from the provider repo root:
 
 ```bash
-cd ~/workspace/terraform-provider-salesforce && \
+cd /path/to/terraform-provider-salesforce && \
 go build -o terraform-provider-salesforce && \
 cd examples/resources/salesforce_self_signed_cert && \
 SALESFORCE_AUTH_URL="$(sf org auth show-sfdx-auth-url -o crm-sebastian --no-prompt --json | jq -r .result.sfdxAuthUrl)" \
 TF_CLI_CONFIG_FILE=/dev/stdin terraform apply -auto-approve <<'EOF'
 provider_installation {
   dev_overrides {
-    "sbresin/salesforce" = "/home/sebe/workspace/terraform-provider-salesforce"
+    "sbresin/salesforce" = "/path/to/terraform-provider-salesforce"
   }
   direct {}
 }
