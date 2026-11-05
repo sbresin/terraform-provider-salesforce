@@ -4,7 +4,7 @@ data "salesforce_cert" "integration" {
 }
 
 output "certificate_id" {
-  description = "The Salesforce ID of the certificate"
+  description = "The certificate developer name"
   value       = data.salesforce_cert.integration.id
 }
 

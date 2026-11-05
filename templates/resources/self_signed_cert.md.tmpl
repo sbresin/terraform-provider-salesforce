@@ -1,0 +1,51 @@
+---
+page_title: "{{ .Name }} {{ .Type }} - {{ .ProviderName }}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{ .Name }} ({{ .Type }})
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+{{ tffile "examples/resources/salesforce_self_signed_cert/resource.tf" }}
+
+## Renewal
+
+Salesforce self-signed certificates are valid for one year. Once the current time
+is within `early_renewal_hours` of `expiration_date`, the next plan replaces the
+certificate: the old one is deleted and a new key pair is generated under the
+**same `developer_name`**. Because the JWK `kid` is the developer name, the `kid`
+stays stable while `n` (the key) changes. `cert_pem`, `cert_sha256` and `jwk` are
+unknown during that plan, so anything derived from them (a JWKS, a trust store
+entry) is updated in the same apply.
+
+Do not set `create_before_destroy` on this resource: the replacement uses the
+same developer name and would collide with the certificate it replaces.
+
+## JWKS
+
+`jwk` is a JSON string (`kty`, `kid`, `use = "sig"`, `alg = "RS256"`, `n`, `e`).
+Combine several certificates (here created with `for_each`) into one JWKS:
+
+```terraform
+locals {
+  jwks = jsonencode({
+    keys = [for c in salesforce_self_signed_cert.keys : jsondecode(c.jwk)]
+  })
+}
+```
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+Import is supported using the following syntax:
+
+{{ codefile "shell" "examples/resources/salesforce_self_signed_cert/import.sh" }}
+
+`early_renewal_hours` is Terraform-only state and imports as `0`; if configured
+otherwise, the first plan shows an in-place update that makes no Salesforce call.
