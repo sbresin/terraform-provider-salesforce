@@ -15,13 +15,18 @@ Salesforce credentials, so never add any as repository secrets.
 
 ## Releasing
 
-Push a semver tag (`git tag v0.1.0 && git push origin v0.1.0`). The Release
-workflow runs GoReleaser, which builds the zips, writes `SHA256SUMS` (including the
-registry manifest), signs it with the GPG key from the `GPG_PRIVATE_KEY` /
-`PASSPHRASE` repository secrets, and publishes the GitHub release. The Terraform
-Registry picks it up via webhook. The key must be RSA (not ECC) and its public half
-registered under Registry → User Settings → Signing Keys. Never re-tag a released
-version. Dry run: `goreleaser release --snapshot --clean --skip=sign`.
+Push a semver tag (`git tag v0.1.0 && git push origin v0.1.0`; a ruleset limits
+`v*` tag creation to repo admins and blocks moving or deleting them). The Release
+workflow waits for the owner's approval of the `release` environment (the only place
+holding `GPG_PRIVATE_KEY` / `PASSPHRASE`, deployable from `v*` tags only), then runs
+GoReleaser: zips per OS/arch, `SHA256SUMS` (including the registry manifest), a
+detached signature, and the GitHub release. The Terraform Registry picks it up via
+webhook. Dry run: `goreleaser release --snapshot --clean --skip=sign`.
+
+Signing key rules: one dedicated RSA 4096 key (the registry rejects ECC), no expiry,
+backup plus revocation certificate kept offline. Never delete a key from the registry:
+every version stays tied to the key that signed it. To rotate, add the new key
+alongside the old one. If you ever extend an expiry date, upload the public key again.
 
 ## E2E lifecycle test
 
