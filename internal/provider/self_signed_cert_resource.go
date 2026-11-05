@@ -58,24 +58,30 @@ func (r *SelfSignedCertResource) Schema(_ context.Context, _ resource.SchemaRequ
 	resp.Schema = schema.Schema{
 		Description: "Manages a Salesforce-generated self-signed certificate. Salesforce owns the private key; Terraform exposes only public certificate metadata.",
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{Computed: true},
+			"id": schema.StringAttribute{
+				Description: "Same as developer_name.",
+				Computed:    true,
+			},
 			"developer_name": schema.StringAttribute{
-				Required: true,
+				Description: "API name of the certificate. Also used as the JWK kid. Changing it forces a new certificate.",
+				Required:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"master_label": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
+				Description: "Human-readable label. Defaults to developer_name. Changing it forces a new certificate.",
+				Optional:    true,
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"key_size": schema.Int64Attribute{
-				Optional: true,
-				Computed: true,
-				Default:  int64default.StaticInt64(2048),
+				Description: "RSA key size in bits: 2048 (default) or 4096. Changing it forces a new certificate.",
+				Optional:    true,
+				Computed:    true,
+				Default:     int64default.StaticInt64(2048),
 				Validators: []validator.Int64{
 					int64validator.OneOf(2048, 4096),
 				},
@@ -84,30 +90,47 @@ func (r *SelfSignedCertResource) Schema(_ context.Context, _ resource.SchemaRequ
 				},
 			},
 			"private_key_exportable": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(false),
+				Description: "Whether Salesforce allows exporting the private key. Defaults to false. Changing it forces a new certificate.",
+				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.RequiresReplace(),
 				},
 			},
 			"early_renewal_hours": schema.Int64Attribute{
-				Optional: true,
-				Computed: true,
-				Default:  int64default.StaticInt64(0),
+				Description: "Hours before expiration_date from which the next plan replaces the certificate under the same developer_name. Defaults to 0 (renew once expired).",
+				Optional:    true,
+				Computed:    true,
+				Default:     int64default.StaticInt64(0),
 				Validators: []validator.Int64{
 					int64validator.AtLeast(0),
 				},
 			},
-			"cert_pem":    schema.StringAttribute{Computed: true},
-			"cert_sha256": schema.StringAttribute{Computed: true},
+			"cert_pem": schema.StringAttribute{
+				Description: "Public certificate in PEM format.",
+				Computed:    true,
+			},
+			"cert_sha256": schema.StringAttribute{
+				Description: "SHA-256 fingerprint of the certificate (hex).",
+				Computed:    true,
+			},
 			"jwk": schema.StringAttribute{
 				Computed:    true,
 				Description: "The public key as an RS256 JSON Web Key (JSON string), kid = developer_name. Collect several into a JWKS to publish them side by side.",
 			},
-			"expiration_date":                    schema.StringAttribute{Computed: true},
-			"ready_for_renewal":                  schema.BoolAttribute{Computed: true},
-			"encrypted_with_platform_encryption": schema.BoolAttribute{Computed: true},
+			"expiration_date": schema.StringAttribute{
+				Description: "Expiration date (YYYY-MM-DD) set by Salesforce.",
+				Computed:    true,
+			},
+			"ready_for_renewal": schema.BoolAttribute{
+				Description: "Whether the certificate is within early_renewal_hours of expiring at the last refresh.",
+				Computed:    true,
+			},
+			"encrypted_with_platform_encryption": schema.BoolAttribute{
+				Description: "Whether the certificate is encrypted with Shield Platform Encryption.",
+				Computed:    true,
+			},
 		},
 	}
 }
