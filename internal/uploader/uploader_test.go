@@ -107,10 +107,10 @@ func TestUploader_Upload(t *testing.T) {
 
 	t.Run("upload error - form error message", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case r.Method == http.MethodGet:
+			switch r.Method {
+			case http.MethodGet:
 				w.Write([]byte(`<form><input name="_CONFIRMATIONTOKEN" value="token"/></form>`))
-			case r.Method == http.MethodPost:
+			case http.MethodPost:
 				// Return error page (still on form URL)
 				w.Header().Set("Content-Type", "text/html")
 				w.Write([]byte(`<!DOCTYPE html>

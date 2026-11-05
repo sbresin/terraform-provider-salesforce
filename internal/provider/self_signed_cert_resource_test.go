@@ -267,14 +267,14 @@ resource "salesforce_self_signed_cert" "test" {
 func TestSelfSignedCertResource_ValidationErrors(t *testing.T) {
 	var serverURL string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/services/oauth2/token":
+		switch r.URL.Path {
+		case "/services/oauth2/token":
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"access_token": "test-token"})
-		case r.URL.Path == "/services/oauth2/singleaccess":
+		case "/services/oauth2/singleaccess":
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"frontdoor_uri": serverURL + "/secur/frontdoor.jsp?otp=abc"})
-		case r.URL.Path == "/secur/frontdoor.jsp":
+		case "/secur/frontdoor.jsp":
 			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "test-session-id"})
 			w.WriteHeader(http.StatusOK)
 		default:

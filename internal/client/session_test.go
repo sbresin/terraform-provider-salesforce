@@ -15,8 +15,8 @@ func TestSessionSource_Session(t *testing.T) {
 		var serverURL string
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case r.URL.Path == "/services/oauth2/singleaccess":
+			switch r.URL.Path {
+			case "/services/oauth2/singleaccess":
 				// Step 1: Return frontdoor URL
 				if auth := r.Header.Get("Authorization"); auth != "Bearer test-access-token" {
 					t.Errorf("expected Bearer token, got %q", auth)
@@ -27,7 +27,7 @@ func TestSessionSource_Session(t *testing.T) {
 					"frontdoor_uri": serverURL + "/secur/frontdoor.jsp?otp=abc123",
 				})
 
-			case r.URL.Path == "/secur/frontdoor.jsp":
+			case "/secur/frontdoor.jsp":
 				// Step 2: Set session cookies and redirect
 				requestCount++
 				http.SetCookie(w, &http.Cookie{Name: "sid", Value: "session-id-12345"})
@@ -35,7 +35,7 @@ func TestSessionSource_Session(t *testing.T) {
 				w.Header().Set("Location", serverURL+"/home/home.jsp")
 				w.WriteHeader(http.StatusFound)
 
-			case r.URL.Path == "/home/home.jsp":
+			case "/home/home.jsp":
 				// Step 3: Final redirect target
 				requestCount++
 				w.WriteHeader(http.StatusOK)
@@ -107,13 +107,13 @@ func TestSessionSource_Session(t *testing.T) {
 		var serverURL string
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case r.URL.Path == "/services/oauth2/singleaccess":
+			switch r.URL.Path {
+			case "/services/oauth2/singleaccess":
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(map[string]string{
 					"frontdoor_uri": serverURL + "/secur/frontdoor.jsp?otp=abc123",
 				})
-			case r.URL.Path == "/secur/frontdoor.jsp":
+			case "/secur/frontdoor.jsp":
 				// No cookies set!
 				w.WriteHeader(http.StatusOK)
 			default:
