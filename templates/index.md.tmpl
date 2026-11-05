@@ -1,0 +1,44 @@
+---
+page_title: "Provider: Salesforce"
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# Salesforce Provider
+
+{{ .Description | trimspace }} Currently manages Salesforce-generated certificates
+(`salesforce_self_signed_cert`) and reads existing ones (`salesforce_cert`).
+
+## Authentication
+
+Configure exactly one of the following modes, in the provider block or via
+environment variables. Mixing both modes is an error.
+
+### Client credentials
+
+An External Client App / Connected App with the client credentials flow enabled:
+`instance_url`, `client_id`, `client_secret`
+(`SALESFORCE_INSTANCE_URL`, `SALESFORCE_CLIENT_ID`, `SALESFORCE_CLIENT_SECRET`).
+
+### SFDX auth URL
+
+A `force://...` URL holding a refresh token (`auth_url` / `SALESFORCE_AUTH_URL`).
+Generate it with the Salesforce CLI:
+
+```shell
+sf org auth show-sfdx-auth-url -o <org-alias> --no-prompt
+```
+
+### No credentials
+
+Without any credentials the provider still configures successfully; only planning
+or applying a resource or data source fails with "Missing Authentication
+Configuration". A root module can therefore include the provider in environments
+without Salesforce access as long as it creates no instances there (e.g.
+`count = 0`).
+
+## Example Usage
+
+{{ tffile "examples/provider/provider.tf" }}
+
+{{ .SchemaMarkdown | trimspace }}

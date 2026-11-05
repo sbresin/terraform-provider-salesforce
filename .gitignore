@@ -1,0 +1,36 @@
+# Binaries
+/terraform-provider-salesforce
+*.exe
+dist/
+
+# Test artifacts
+*.test
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# POC / internal docs
+poc/
+docs/superpowers/
+docs/certificate-upload-spec.md
+docs/metadata-api*/
+.reference/
+
+# Agent tooling
+.agents/
+.opencode/
+.superpowers/
+.playwright-mcp/
+skills-lock.json
