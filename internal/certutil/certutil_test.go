@@ -1,6 +1,7 @@
 package certutil
 
 import (
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -81,5 +82,20 @@ func TestLeafSHA256(t *testing.T) {
 
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestJWK(t *testing.T) {
+	got, err := JWK(testCertPEM, "MyCert")
+	if err != nil {
+		t.Fatalf("JWK returned error: %v", err)
+	}
+
+	block, _ := pem.Decode([]byte(testCertPEM))
+	cert, _ := x509.ParseCertificate(block.Bytes)
+	n := base64.RawURLEncoding.EncodeToString(cert.PublicKey.(*rsa.PublicKey).N.Bytes())
+	want := `{"kty":"RSA","kid":"MyCert","use":"sig","alg":"RS256","n":"` + n + `","e":"AQAB"}`
+	if got != want {
+		t.Fatalf("unexpected JWK\nwant: %s\n got: %s", want, got)
 	}
 }

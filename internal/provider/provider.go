@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"os"
 	"strings"
 
@@ -36,6 +37,25 @@ type ProviderClients struct {
 	Metadata *metadata.Client
 	Uploader *uploader.Uploader
 	Session  *client.SessionCredentials
+
+	// missingAuth is set when the provider has no credentials. It only fails
+	// once a resource or data source is used, so modules can use the provider
+	// conditionally (count = 0) in environments without credentials.
+	missingAuth bool
+}
+
+// configured reports the missing-credentials error to a resource or data source.
+func (c *ProviderClients) configured(diags *diag.Diagnostics) bool {
+	if c.missingAuth {
+		diags.AddError(
+			"Missing Authentication Configuration",
+			"Either auth_url or all of instance_url, client_id, and client_secret must be configured. "+
+				"Set them in the provider configuration or via environment variables "+
+				"(SALESFORCE_AUTH_URL or SALESFORCE_INSTANCE_URL/SALESFORCE_CLIENT_ID/SALESFORCE_CLIENT_SECRET).",
+		)
+		return false
+	}
+	return true
 }
 
 func New(version string) func() provider.Provider {
@@ -123,12 +143,9 @@ func (p *SalesforceProvider) Configure(ctx context.Context, req provider.Configu
 	}
 
 	if !hasClientCreds && !hasAuthURL {
-		resp.Diagnostics.AddError(
-			"Missing Authentication Configuration",
-			"Either auth_url or all of instance_url, client_id, and client_secret must be configured. "+
-				"Set them in the provider configuration or via environment variables "+
-				"(SALESFORCE_AUTH_URL or SALESFORCE_INSTANCE_URL/SALESFORCE_CLIENT_ID/SALESFORCE_CLIENT_SECRET).",
-		)
+		clients := &ProviderClients{missingAuth: true}
+		resp.DataSourceData = clients
+		resp.ResourceData = clients
 		return
 	}
 

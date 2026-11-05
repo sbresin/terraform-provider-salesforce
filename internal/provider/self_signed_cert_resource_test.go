@@ -144,6 +144,8 @@ resource "salesforce_self_signed_cert" "test" {
 					resource.TestCheckResourceAttrSet("salesforce_self_signed_cert.test", "cert_sha256"),
 					resource.TestCheckResourceAttr("salesforce_self_signed_cert.test", "expiration_date", "2027-07-11"),
 					resource.TestCheckResourceAttr("salesforce_self_signed_cert.test", "ready_for_renewal", "false"),
+					resource.TestMatchResourceAttr("salesforce_self_signed_cert.test", "jwk",
+						regexp.MustCompile(`^\{"kty":"RSA","kid":"TerraformE2ETestCert","use":"sig","alg":"RS256","n":"[A-Za-z0-9_-]+","e":"AQAB"\}$`)),
 				),
 			},
 		},

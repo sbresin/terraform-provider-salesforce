@@ -81,6 +81,18 @@ output "cert_pem" {
 
 `salesforce_self_signed_cert` creates a Salesforce-generated key pair and certificate. Salesforce owns the private key. The `cert_pem` output contains only the public certificate and can be shared with services that verify signatures created by Salesforce.
 
+`jwk` is the public key as an RS256 JSON Web Key with `kid` = `developer_name`. Publish one or more as a JWKS:
+
+```hcl
+locals {
+  jwks = jsonencode({ keys = [jsondecode(salesforce_self_signed_cert.integration.jwk)] })
+}
+```
+
+Once `early_renewal_hours` before expiry, the next apply replaces the certificate under the same `developer_name` (same `kid`, new key) and everything derived from `jwk` follows in the same apply.
+
+Without credentials the provider still configures; only using a resource or data source fails. That lets a module use it in some environments only (`count = 0` elsewhere).
+
 ## Development
 
 ### Running Tests

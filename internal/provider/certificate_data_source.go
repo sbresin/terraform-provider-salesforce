@@ -91,7 +91,9 @@ func (d *CertificateDataSource) Configure(_ context.Context, req datasource.Conf
 		return
 	}
 
-	d.clients = clients
+	if clients.configured(&resp.Diagnostics) {
+		d.clients = clients
+	}
 }
 
 func (d *CertificateDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {

@@ -39,6 +39,7 @@ type selfSignedCertResourceModel struct {
 	PrivateKeyExportable            types.Bool   `tfsdk:"private_key_exportable"`
 	EarlyRenewalHours               types.Int64  `tfsdk:"early_renewal_hours"`
 	CertPEM                         types.String `tfsdk:"cert_pem"`
+	JWK                             types.String `tfsdk:"jwk"`
 	CertSHA256                      types.String `tfsdk:"cert_sha256"`
 	ExpirationDate                  types.String `tfsdk:"expiration_date"`
 	ReadyForRenewal                 types.Bool   `tfsdk:"ready_for_renewal"`
@@ -98,10 +99,14 @@ func (r *SelfSignedCertResource) Schema(_ context.Context, _ resource.SchemaRequ
 					int64validator.AtLeast(0),
 				},
 			},
-			"cert_pem":          schema.StringAttribute{Computed: true},
-			"cert_sha256":       schema.StringAttribute{Computed: true},
-			"expiration_date":   schema.StringAttribute{Computed: true},
-			"ready_for_renewal":                 schema.BoolAttribute{Computed: true},
+			"cert_pem":    schema.StringAttribute{Computed: true},
+			"cert_sha256": schema.StringAttribute{Computed: true},
+			"jwk": schema.StringAttribute{
+				Computed:    true,
+				Description: "The public key as an RS256 JSON Web Key (JSON string), kid = developer_name. Collect several into a JWKS to publish them side by side.",
+			},
+			"expiration_date":                    schema.StringAttribute{Computed: true},
+			"ready_for_renewal":                  schema.BoolAttribute{Computed: true},
 			"encrypted_with_platform_encryption": schema.BoolAttribute{Computed: true},
 		},
 	}
@@ -116,7 +121,9 @@ func (r *SelfSignedCertResource) Configure(_ context.Context, req resource.Confi
 		resp.Diagnostics.AddError("Unexpected Resource Configure Type", fmt.Sprintf("Expected *ProviderClients, got: %T", req.ProviderData))
 		return
 	}
-	r.clients = clients
+	if clients.configured(&resp.Diagnostics) {
+		r.clients = clients
+	}
 }
 
 func (r *SelfSignedCertResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -293,6 +300,10 @@ func (r *SelfSignedCertResource) readState(ctx context.Context, developerName st
 	if err != nil {
 		return nil, err
 	}
+	jwk, err := certutil.JWK(certPEM, cert.FullName)
+	if err != nil {
+		return nil, err
+	}
 
 	expirationDate := ""
 	if cert.ExpirationDate != nil {
@@ -307,15 +318,16 @@ func (r *SelfSignedCertResource) readState(ctx context.Context, developerName st
 	}
 
 	return &selfSignedCertResourceModel{
-		ID:                   types.StringValue(cert.FullName),
-		DeveloperName:        types.StringValue(cert.FullName),
-		MasterLabel:          types.StringValue(cert.MasterLabel),
-		KeySize:              types.Int64Value(int64(cert.KeySize)),
-		PrivateKeyExportable: types.BoolValue(cert.PrivateKeyExportable),
-		EarlyRenewalHours:    types.Int64Value(earlyRenewalHours),
-		CertPEM:              types.StringValue(certPEM),
-		CertSHA256:           types.StringValue(sha256),
-		ExpirationDate:       types.StringValue(expirationDate),
+		ID:                              types.StringValue(cert.FullName),
+		DeveloperName:                   types.StringValue(cert.FullName),
+		MasterLabel:                     types.StringValue(cert.MasterLabel),
+		KeySize:                         types.Int64Value(int64(cert.KeySize)),
+		PrivateKeyExportable:            types.BoolValue(cert.PrivateKeyExportable),
+		EarlyRenewalHours:               types.Int64Value(earlyRenewalHours),
+		CertPEM:                         types.StringValue(certPEM),
+		CertSHA256:                      types.StringValue(sha256),
+		JWK:                             types.StringValue(jwk),
+		ExpirationDate:                  types.StringValue(expirationDate),
 		ReadyForRenewal:                 types.BoolValue(ready),
 		EncryptedWithPlatformEncryption: types.BoolValue(cert.EncryptedWithPlatformEncryption),
 	}, nil

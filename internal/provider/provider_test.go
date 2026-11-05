@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -79,6 +80,58 @@ provider "salesforce" {
 `,
 				// Just verify the provider configures without error
 				// when proper env vars are set
+			},
+		},
+	})
+}
+
+func unsetSalesforceEnv(t *testing.T) {
+	for _, name := range []string{"SALESFORCE_AUTH_URL", "SALESFORCE_INSTANCE_URL", "SALESFORCE_CLIENT_ID", "SALESFORCE_CLIENT_SECRET"} {
+		t.Setenv(name, "")
+	}
+}
+
+// A root module that only uses the provider in some environments (count = 0
+// elsewhere) must plan without credentials there.
+func TestProvider_UnusedWithoutCredentials(t *testing.T) {
+	unsetSalesforceEnv(t)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "salesforce_self_signed_cert" "test" {
+  count          = 0
+  developer_name = "Unused"
+}
+`,
+			},
+		},
+	})
+}
+
+func TestProvider_UsedWithoutCredentials(t *testing.T) {
+	unsetSalesforceEnv(t)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "salesforce_self_signed_cert" "test" {
+  developer_name = "Used"
+}
+`,
+				ExpectError: regexp.MustCompile("Missing Authentication Configuration"),
+			},
+			{
+				Config: `
+data "salesforce_cert" "test" {
+  developer_name = "Used"
+}
+`,
+				ExpectError: regexp.MustCompile("Missing Authentication Configuration"),
 			},
 		},
 	})
