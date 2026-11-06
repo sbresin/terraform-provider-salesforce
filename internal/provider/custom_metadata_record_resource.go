@@ -28,8 +28,9 @@ var _ resource.ResourceWithImportState = &CustomMetadataRecordResource{}
 var _ resource.ResourceWithModifyPlan = &CustomMetadataRecordResource{}
 
 var (
-	apiNameRegexp       = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
-	developerNameRegexp = regexp.MustCompile(`^[A-Za-z](?:[A-Za-z0-9]|_[A-Za-z0-9])*$`)
+	apiNameRegexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
+	// Optional namespace prefix (up to 15 letters/digits) followed by the name itself.
+	developerNameRegexp = regexp.MustCompile(`^(?:[A-Za-z][A-Za-z0-9]{0,14}__)?[A-Za-z](?:[A-Za-z0-9]|_[A-Za-z0-9])*$`)
 )
 
 type CustomMetadataRecordResource struct {
@@ -76,12 +77,12 @@ func (r *CustomMetadataRecordResource) Schema(_ context.Context, _ resource.Sche
 				},
 			},
 			"developer_name": schema.StringAttribute{
-				Description: "Record name (DeveloperName): starts with a letter, only letters, digits and single underscores, no trailing underscore, at most 40 characters. Changing it forces a new record.",
+				Description: "Record name (DeveloperName), optionally with a namespace prefix (ns__Name): starts with a letter, only letters, digits and single underscores, no trailing underscore, at most 40 characters without the prefix. Changing it forces a new record.",
 				Required:    true,
 				Validators: []validator.String{
-					stringvalidator.LengthAtMost(40),
 					stringvalidator.RegexMatches(developerNameRegexp,
-						"must start with a letter and contain only letters, digits and single underscores, not ending with an underscore"),
+						"must be an optional namespace prefix (ns__) and a name that starts with a letter and contains only letters, digits and single underscores, not ending with an underscore"),
+					nameMaxLength{},
 				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -361,5 +362,29 @@ func (noMdtSuffix) ValidateString(_ context.Context, req validator.StringRequest
 	if v := req.ConfigValue.ValueString(); strings.HasSuffix(strings.ToLower(v), "__mdt") {
 		resp.Diagnostics.AddAttributeError(req.Path, "Invalid Custom Metadata Type",
 			fmt.Sprintf("type must be the API name without the __mdt suffix: use %q instead of %q", v[:len(v)-5], v))
+	}
+}
+
+// nameMaxLength limits a developer name to 40 characters, not counting a namespace prefix.
+type nameMaxLength struct{}
+
+func (nameMaxLength) Description(context.Context) string {
+	return "must be at most 40 characters without the namespace prefix"
+}
+
+func (v nameMaxLength) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
+
+func (nameMaxLength) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	v := req.ConfigValue.ValueString()
+	name := v
+	if _, after, ok := strings.Cut(v, "__"); ok { // a namespace prefix has no underscores
+		name = after
+	}
+	if len(name) > 40 {
+		resp.Diagnostics.AddAttributeError(req.Path, "Invalid developer_name",
+			fmt.Sprintf("developer_name must be at most 40 characters without the namespace prefix, got %d", len(name)))
 	}
 }

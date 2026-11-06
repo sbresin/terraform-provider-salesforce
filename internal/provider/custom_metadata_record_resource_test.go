@@ -98,7 +98,7 @@ func (o *fakeCMDTOrg) handle(t *testing.T, body string) string {
 		return `<checkDeployStatusResponse><result><id>0Af</id><done>true</done><success>true</success><status>Succeeded</status></result></checkDeployStatusResponse>`
 	case req.Type == "CustomObject":
 		o.typeLookups++
-		if req.FullNames != "Probe__mdt" {
+		if req.FullNames != "Probe__mdt" && req.FullNames != "ns__Probe__mdt" {
 			return `<readMetadataResponse><result><records xsi:nil="true"/></result></readMetadataResponse>`
 		}
 		var fields strings.Builder
@@ -477,6 +477,33 @@ resource "salesforce_custom_metadata_record" "test" {
 	})
 }
 
+func TestCustomMetadataRecordResource_Namespaced(t *testing.T) {
+	org := useFakeOrg(t)
+	devName := "ns__" + strings.Repeat("a", 40) // 40 is the limit without the namespace prefix
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{{
+			Config: fmt.Sprintf(`
+resource "salesforce_custom_metadata_record" "test" {
+  type           = "ns__Probe"
+  developer_name = %q
+  label          = "Namespaced"
+  values         = { Text__c = "x" }
+}
+`, devName),
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("salesforce_custom_metadata_record.test", "id", "ns__Probe."+devName),
+				func(*terraform.State) error {
+					if _, ok := org.records["ns__Probe."+devName]; !ok {
+						return fmt.Errorf("record not deployed under its namespaced fullName: %v", org.records)
+					}
+					return nil
+				},
+			),
+		}},
+	})
+}
+
 func TestCustomMetadataRecordResource_DeleteAlreadyGone(t *testing.T) {
 	org := useFakeOrg(t)
 	org.vanishOnDelete = true
@@ -504,7 +531,10 @@ func TestCustomMetadataRecordResource_Validation(t *testing.T) {
 	}{
 		{"type with __mdt", "Probe__mdt", "One", "One", `without the __mdt suffix`},
 		{"type invalid chars", "Pro-be", "One", "One", `must be a Salesforce API name`},
-		{"developer_name double underscore", "Probe", "One__Two", "One", `developer_name`},
+		{"developer_name double underscore", "Probe", "ns__One__Two", "One", `developer_name`},
+		{"namespace prefix too long", "Probe", strings.Repeat("n", 16) + "__One", "One", `developer_name`},
+		{"namespace prefix with underscore", "Probe", "n_s__One", "One", `developer_name`},
+		{"name too long after namespace", "Probe", "ns__" + strings.Repeat("a", 41), "One", `developer_name`},
 		{"developer_name trailing underscore", "Probe", "One_", "One", `developer_name`},
 		{"developer_name leading digit", "Probe", "1One", "One", `developer_name`},
 		{"developer_name too long", "Probe", strings.Repeat("a", 41), "One", `developer_name`},

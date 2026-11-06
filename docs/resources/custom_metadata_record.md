@@ -46,7 +46,7 @@ record is created or the set of fields in `values` changes.
 
 ### Required
 
-- `developer_name` (String) Record name (DeveloperName): starts with a letter, only letters, digits and single underscores, no trailing underscore, at most 40 characters. Changing it forces a new record.
+- `developer_name` (String) Record name (DeveloperName), optionally with a namespace prefix (ns__Name): starts with a letter, only letters, digits and single underscores, no trailing underscore, at most 40 characters without the prefix. Changing it forces a new record.
 - `label` (String) Record label, at most 40 characters.
 - `type` (String) API name of the Custom Metadata Type without the __mdt suffix, e.g. MyType for MyType__mdt. Changing it forces a new record.
 
