@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 )
 
 const defaultAPIVersion = "67.0"
@@ -17,6 +18,9 @@ type Client struct {
 	sessionID   string
 	apiVersion  string
 	httpClient  *http.Client
+
+	fieldTypesMu sync.Mutex
+	fieldTypes   map[string]map[string]string // CMDT type -> field -> field type
 }
 
 // Option configures a Client.

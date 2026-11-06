@@ -118,6 +118,36 @@ type CertificateRecord struct {
 	PrivateKeyExportable            bool   `xml:"privateKeyExportable,omitempty"`
 }
 
+type readCustomMetadataResponse struct {
+	XMLName xml.Name            `xml:"readMetadataResponse"`
+	Records []customMetadataRaw `xml:"result>records"`
+}
+
+type customMetadataRaw struct {
+	FullName  string `xml:"fullName"`
+	Label     string `xml:"label"`
+	Protected bool   `xml:"protected"`
+	Values    []struct {
+		Field string `xml:"field"`
+		Value struct {
+			Type string `xml:"type,attr"`
+			Nil  bool   `xml:"nil,attr"` // xsi:nil; the envelope's xmlns:xsi is lost in Body.Content
+			Text string `xml:",chardata"`
+		} `xml:"value"`
+	} `xml:"values"`
+}
+
+type readCustomObjectResponse struct {
+	XMLName xml.Name `xml:"readMetadataResponse"`
+	Records []struct {
+		FullName string `xml:"fullName"`
+		Fields   []struct {
+			FullName string `xml:"fullName"`
+			Type     string `xml:"type"`
+		} `xml:"fields"`
+	} `xml:"result>records"`
+}
+
 // ListMetadataResponse wraps the listMetadata response.
 type ListMetadataResponse struct {
 	XMLName xml.Name         `xml:"listMetadataResponse"`
@@ -181,6 +211,29 @@ type CertificateCreate struct {
 	MasterLabel          string
 	KeySize              int
 	PrivateKeyExportable bool
+}
+
+// CustomMetadataDeploy describes a Custom Metadata record to create or update.
+type CustomMetadataDeploy struct {
+	Type          string // CMDT API name without __mdt
+	DeveloperName string
+	Label         string
+	Protected     bool
+	Values        map[string]string // field API name -> value; every other field is cleared
+}
+
+// CustomMetadataRecord is a Custom Metadata record as read from the org.
+type CustomMetadataRecord struct {
+	FullName  string
+	Label     string
+	Protected bool
+	Values    map[string]FieldValue // non-null fields only
+}
+
+// FieldValue is a Custom Metadata field value with its xsi:type (e.g. "xsd:double").
+type FieldValue struct {
+	Type  string
+	Value string
 }
 
 // Certificate represents a Salesforce certificate with all metadata.
