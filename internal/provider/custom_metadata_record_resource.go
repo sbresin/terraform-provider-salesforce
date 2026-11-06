@@ -104,6 +104,7 @@ func (r *CustomMetadataRecordResource) Schema(_ context.Context, _ resource.Sche
 				Optional:    true,
 				ElementType: types.StringType,
 				Validators: []validator.Map{
+					mapvalidator.NoNullValues(),
 					mapvalidator.ValueStringsAre(stringvalidator.LengthAtLeast(1)),
 				},
 			},
@@ -187,13 +188,14 @@ func (r *CustomMetadataRecordResource) Delete(ctx context.Context, req resource.
 
 	deployID, err := r.clients.Metadata.DeleteCustomMetadata(ctx, state.ID.ValueString())
 	if err != nil {
-		if errors.Is(err, metadata.ErrNotFound) {
-			return
-		}
 		resp.Diagnostics.AddError("Error Deleting Custom Metadata Record", err.Error())
 		return
 	}
 	if _, err := r.clients.Metadata.WaitForDeploy(ctx, deployID); err != nil {
+		// A destructive deploy of a record that is already gone fails ("No CustomMetadata named ... found").
+		if _, readErr := r.clients.Metadata.ReadCustomMetadata(ctx, state.ID.ValueString()); errors.Is(readErr, metadata.ErrNotFound) {
+			return
+		}
 		resp.Diagnostics.AddError("Custom Metadata Record Delete Deployment Failed", err.Error())
 	}
 }

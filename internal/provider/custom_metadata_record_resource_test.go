@@ -31,6 +31,10 @@ type fakeCMDTOrg struct {
 	lastXML   string
 	deletes   int
 	fieldType map[string]string
+	// vanishOnDelete removes the record just before a destructive deploy, as if deleted
+	// out of band after refresh; the deploy then fails like a real org's does.
+	vanishOnDelete bool
+	deployFailed   bool
 }
 
 func newFakeCMDTOrg() *fakeCMDTOrg {
@@ -85,6 +89,9 @@ func (o *fakeCMDTOrg) handle(t *testing.T, body string) string {
 	_ = xml.Unmarshal([]byte(body), &req)
 
 	switch {
+	case strings.Contains(body, "checkDeployStatus") && o.deployFailed:
+		o.deployFailed = false
+		return `<checkDeployStatusResponse><result><id>0Af</id><done>true</done><success>false</success><status>Failed</status><details><componentFailures><fullName>Probe.One</fullName><problem>No CustomMetadata named: Probe.One found</problem><problemType>Warning</problemType><componentType>CustomMetadata</componentType></componentFailures></details></result></checkDeployStatusResponse>`
 	case strings.Contains(body, "checkDeployStatus"):
 		return `<checkDeployStatusResponse><result><id>0Af</id><done>true</done><success>true</success><status>Succeeded</status></result></checkDeployStatusResponse>`
 	case req.Type == "CustomObject":
@@ -127,9 +134,14 @@ func (o *fakeCMDTOrg) handle(t *testing.T, body string) string {
 		}
 		if d, ok := files["destructiveChanges.xml"]; ok {
 			o.deletes++
+			if o.vanishOnDelete {
+				o.records = map[string]map[string]string{}
+			}
+			o.deployFailed = true
 			for name := range o.records {
 				if strings.Contains(d, "<members>"+name+"</members>") {
 					delete(o.records, name)
+					o.deployFailed = false
 				}
 			}
 			return `<deployResponse><result><id>0Af</id></result></deployResponse>`
@@ -366,6 +378,26 @@ resource "salesforce_custom_metadata_record" "test" {
 	})
 }
 
+func TestCustomMetadataRecordResource_DeleteAlreadyGone(t *testing.T) {
+	org := useFakeOrg(t)
+	org.vanishOnDelete = true
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{{
+			Config: `
+resource "salesforce_custom_metadata_record" "test" {
+  type           = "Probe"
+  developer_name = "One"
+  label          = "One"
+}
+`,
+		}},
+	})
+	if org.deletes == 0 {
+		t.Fatal("expected delete deploy during destroy")
+	}
+}
+
 func TestCustomMetadataRecordResource_Validation(t *testing.T) {
 	useFakeOrg(t)
 	tests := []struct {
@@ -410,6 +442,23 @@ resource "salesforce_custom_metadata_record" "test" {
 }
 `,
 				ExpectError: regexp.MustCompile(`at least 1`),
+			}},
+		})
+	})
+
+	t.Run("null value", func(t *testing.T) {
+		resource.UnitTest(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+			Steps: []resource.TestStep{{
+				Config: `
+resource "salesforce_custom_metadata_record" "test" {
+  type           = "Probe"
+  developer_name = "One"
+  label          = "One"
+  values         = { Text__c = "a", Flag__c = null }
+}
+`,
+				ExpectError: regexp.MustCompile(`Null Map Value`),
 			}},
 		})
 	})
