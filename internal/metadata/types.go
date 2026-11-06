@@ -140,7 +140,8 @@ type customMetadataRaw struct {
 type readCustomObjectResponse struct {
 	XMLName xml.Name `xml:"readMetadataResponse"`
 	Records []struct {
-		Fields []struct {
+		FullName string `xml:"fullName"`
+		Fields   []struct {
 			FullName string `xml:"fullName"`
 			Type     string `xml:"type"`
 		} `xml:"fields"`

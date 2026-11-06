@@ -57,7 +57,7 @@ func (c *Client) ReadCustomMetadata(ctx context.Context, fullName string) (*Cust
 // DeployCustomMetadata creates or updates a Custom Metadata record and returns the deployment ID.
 // The record is replaced as a whole: fields of the type that are not in Values are cleared.
 func (c *Client) DeployCustomMetadata(ctx context.Context, rec CustomMetadataDeploy) (string, error) {
-	fieldTypes, err := c.customMetadataFieldTypes(ctx, rec.Type)
+	fieldTypes, err := c.CustomMetadataFieldTypes(ctx, rec.Type)
 	if err != nil {
 		return "", err
 	}
@@ -94,8 +94,15 @@ func (c *Client) DeleteCustomMetadata(ctx context.Context, fullName string) (str
 	return deployID, nil
 }
 
-// customMetadataFieldTypes returns field API name -> field type (e.g. "Checkbox") of <cmdtType>__mdt.
-func (c *Client) customMetadataFieldTypes(ctx context.Context, cmdtType string) (map[string]string, error) {
+// CustomMetadataFieldTypes returns field API name -> field type (e.g. "Checkbox") of <cmdtType>__mdt,
+// cached per type for the life of the client. Returns an error wrapping ErrNotFound if the type does not exist.
+func (c *Client) CustomMetadataFieldTypes(ctx context.Context, cmdtType string) (map[string]string, error) {
+	c.fieldTypesMu.Lock()
+	defer c.fieldTypesMu.Unlock()
+	if types, ok := c.fieldTypes[cmdtType]; ok {
+		return types, nil
+	}
+
 	respBody, err := c.doRequest(ctx, "readMetadata", &ReadMetadataRequest{
 		Type:      "CustomObject",
 		FullNames: []string{cmdtType + "__mdt"},
@@ -108,13 +115,18 @@ func (c *Client) customMetadataFieldTypes(ctx context.Context, cmdtType string) 
 	if err := xml.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("parsing readMetadata response: %w", err)
 	}
+	if len(resp.Records) == 0 || resp.Records[0].FullName == "" {
+		return nil, fmt.Errorf("custom metadata type %s__mdt: %w", cmdtType, ErrNotFound)
+	}
 
 	types := map[string]string{}
-	for _, r := range resp.Records {
-		for _, f := range r.Fields {
-			types[f.FullName] = f.Type
-		}
+	for _, f := range resp.Records[0].Fields {
+		types[f.FullName] = f.Type
 	}
+	if c.fieldTypes == nil {
+		c.fieldTypes = map[string]map[string]string{}
+	}
+	c.fieldTypes[cmdtType] = types
 	return types, nil
 }
 

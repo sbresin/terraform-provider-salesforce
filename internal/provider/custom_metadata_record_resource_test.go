@@ -35,6 +35,8 @@ type fakeCMDTOrg struct {
 	// out of band after refresh; the deploy then fails like a real org's does.
 	vanishOnDelete bool
 	deployFailed   bool
+	typeLookups    int
+	deploys        int
 }
 
 func newFakeCMDTOrg() *fakeCMDTOrg {
@@ -95,6 +97,10 @@ func (o *fakeCMDTOrg) handle(t *testing.T, body string) string {
 	case strings.Contains(body, "checkDeployStatus"):
 		return `<checkDeployStatusResponse><result><id>0Af</id><done>true</done><success>true</success><status>Succeeded</status></result></checkDeployStatusResponse>`
 	case req.Type == "CustomObject":
+		o.typeLookups++
+		if req.FullNames != "Probe__mdt" {
+			return `<readMetadataResponse><result><records xsi:nil="true"/></result></readMetadataResponse>`
+		}
 		var fields strings.Builder
 		for f, ft := range o.fieldType {
 			fmt.Fprintf(&fields, "<fields><fullName>%s</fullName><type>%s</type></fields>", f, ft)
@@ -128,6 +134,7 @@ func (o *fakeCMDTOrg) handle(t *testing.T, body string) string {
 		return fmt.Sprintf(`<readMetadataResponse><result><records xsi:type="CustomMetadata"><fullName>%s</fullName><label>%s</label><protected>false</protected>%s</records></result></readMetadataResponse>`,
 			req.FullNames, xmlText(o.labels[req.FullNames]), values.String())
 	case strings.Contains(body, "<met:deploy>"):
+		o.deploys++
 		files, err := readDeployZipFiles(body)
 		if err != nil {
 			t.Errorf("reading deploy zip: %v", err)
@@ -417,6 +424,59 @@ resource "salesforce_custom_metadata_record" "test" {
 	})
 }
 
+func TestCustomMetadataRecordResource_PlanTimeChecks(t *testing.T) {
+	org := useFakeOrg(t)
+	config := func(typ, field string) string {
+		return fmt.Sprintf(`
+resource "salesforce_custom_metadata_record" "test" {
+  type           = %q
+  developer_name = "One"
+  label          = "One"
+  values         = { %s = "x" }
+}
+`, typ, field)
+	}
+	lookups := 0
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config:      config("Probe", "Txet__c"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?s)Txet__c.*Text__c`),
+			},
+			{
+				Config:      config("Nope", "Text__c"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Nope__mdt`),
+			},
+			{
+				PreConfig: func() {
+					if org.deploys != 0 {
+						t.Errorf("plan-time errors must stop before any deploy, got %d deploys", org.deploys)
+					}
+				},
+				Config: config("Probe", "Text__c"),
+			},
+			{
+				// Same keys: no field-type lookup during plan.
+				PreConfig: func() { lookups = org.typeLookups },
+				Config:    config("Probe", "Text__c"),
+				PlanOnly:  true,
+			},
+			{
+				PreConfig: func() {
+					if org.typeLookups != lookups {
+						t.Errorf("unchanged plan looked up field types %d times", org.typeLookups-lookups)
+					}
+				},
+				Config:   config("Probe", "Text__c"),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 func TestCustomMetadataRecordResource_DeleteAlreadyGone(t *testing.T) {
 	org := useFakeOrg(t)
 	org.vanishOnDelete = true
@@ -542,6 +602,11 @@ resource "salesforce_custom_metadata_record" "test" {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
+			{
+				Config:      config("Acc typo", `Txet__c = "a"`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`TfProviderProbe__mdt has no field Txet__c`),
+			},
 			{
 				Config: config("Acc & <Test>", `
     Text__c     = "a & b"

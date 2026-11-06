@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
@@ -24,6 +25,7 @@ import (
 var _ resource.Resource = &CustomMetadataRecordResource{}
 var _ resource.ResourceWithConfigure = &CustomMetadataRecordResource{}
 var _ resource.ResourceWithImportState = &CustomMetadataRecordResource{}
+var _ resource.ResourceWithModifyPlan = &CustomMetadataRecordResource{}
 
 var (
 	apiNameRegexp       = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
@@ -196,6 +198,65 @@ func (r *CustomMetadataRecordResource) ImportState(ctx context.Context, req reso
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("type"), cmdtType)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("developer_name"), devName)...)
+}
+
+// ModifyPlan fails early on an unknown type or field. It looks up the field types only when the
+// type or the set of keys in values changes; the client caches the lookup per type.
+func (r *CustomMetadataRecordResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() || r.clients == nil {
+		return
+	}
+	var plan customMetadataRecordResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() || plan.Type.IsUnknown() || plan.Values.IsUnknown() {
+		return
+	}
+
+	keys := map[string]bool{}
+	for k := range plan.Values.Elements() {
+		keys[k] = true
+	}
+	if !req.State.Raw.IsNull() {
+		var state customMetadataRecordResourceModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		same := state.Type.Equal(plan.Type) && len(state.Values.Elements()) == len(keys)
+		for k := range state.Values.Elements() {
+			same = same && keys[k]
+		}
+		if same {
+			return
+		}
+	}
+
+	fieldTypes, err := r.clients.Metadata.CustomMetadataFieldTypes(ctx, plan.Type.ValueString())
+	if err != nil {
+		if errors.Is(err, metadata.ErrNotFound) {
+			resp.Diagnostics.AddAttributeError(path.Root("type"), "Unknown Custom Metadata Type", err.Error())
+			return
+		}
+		resp.Diagnostics.AddError("Error Reading Custom Metadata Type", err.Error())
+		return
+	}
+	var unknown, known []string
+	for k := range keys {
+		if _, ok := fieldTypes[k]; !ok {
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) == 0 {
+		return
+	}
+	for f := range fieldTypes {
+		known = append(known, f)
+	}
+	sort.Strings(unknown)
+	sort.Strings(known)
+	resp.Diagnostics.AddAttributeError(path.Root("values"), "Unknown Custom Metadata Field",
+		fmt.Sprintf("%s__mdt has no field %s. Fields: %s.",
+			plan.Type.ValueString(), strings.Join(unknown, ", "), strings.Join(known, ", ")))
 }
 
 func (r *CustomMetadataRecordResource) deployAndRead(ctx context.Context, plan customMetadataRecordResourceModel, out interface {

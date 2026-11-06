@@ -241,3 +241,44 @@ func keys(m map[string]string) []string {
 	}
 	return out
 }
+
+func TestClient_CustomMetadataFieldTypes(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		b, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(b), "<met:fullNames>Missing__mdt</met:fullNames>") {
+			w.Write([]byte(soapResponse(`<readMetadataResponse><result><records xsi:nil="true"/></result></readMetadataResponse>`)))
+			return
+		}
+		w.Write([]byte(soapResponse(`<readMetadataResponse><result><records xsi:type="CustomObject"><fullName>Probe__mdt</fullName>
+<fields><fullName>Flag__c</fullName><type>Checkbox</type></fields></records></result></readMetadataResponse>`)))
+	}))
+	defer server.Close()
+	client := NewClient(server.URL, "sid")
+
+	t.Run("cached per type", func(t *testing.T) {
+		for i := 0; i < 2; i++ {
+			types, err := client.CustomMetadataFieldTypes(context.Background(), "Probe")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if types["Flag__c"] != "Checkbox" || len(types) != 1 {
+				t.Fatalf("unexpected field types: %v", types)
+			}
+		}
+		if calls != 1 {
+			t.Fatalf("expected 1 readMetadata call, got %d", calls)
+		}
+	})
+
+	t.Run("missing type", func(t *testing.T) {
+		_, err := client.CustomMetadataFieldTypes(context.Background(), "Missing")
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "Missing__mdt") {
+			t.Fatalf("error should name the type: %v", err)
+		}
+	})
+}
