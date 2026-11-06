@@ -95,6 +95,7 @@ func TestClient_DeployCustomMetadata(t *testing.T) {
 <fields><fullName>DateTime__c</fullName><type>DateTime</type></fields>
 <fields><fullName>Number__c</fullName><type>Number</type></fields>
 <fields><fullName>Text__c</fullName><type>Text</type></fields>
+<fields><fullName>Gone__c</fullName><type>Text</type></fields>
 </records></result></readMetadataResponse>`)))
 		case "deploy":
 			var req struct {
@@ -127,7 +128,6 @@ func TestClient_DeployCustomMetadata(t *testing.T) {
 			"Text__c":     "a & b",
 			"Unknown__c":  "x",
 		},
-		Nulls: []string{"Gone__c"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -158,6 +158,7 @@ func TestClient_DeployCustomMetadata(t *testing.T) {
 		`<field>Number__c</field><value xsi:type="xsd:string">42.5</value>`,
 		`<field>Text__c</field><value xsi:type="xsd:string">a &amp; b</value>`,
 		`<field>Unknown__c</field><value xsi:type="xsd:string">x</value>`,
+		// Fields of the type that are not in Values are cleared: the record is owned as a whole.
 		`<field>Gone__c</field><value xsi:nil="true"/>`,
 	} {
 		if !strings.Contains(rec, want) {

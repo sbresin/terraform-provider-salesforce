@@ -218,8 +218,7 @@ type CustomMetadataDeploy struct {
 	DeveloperName string
 	Label         string
 	Protected     bool
-	Values        map[string]string // field API name -> value
-	Nulls         []string          // field API names to clear
+	Values        map[string]string // field API name -> value; every other field is cleared
 }
 
 // CustomMetadataRecord is a Custom Metadata record as read from the org.

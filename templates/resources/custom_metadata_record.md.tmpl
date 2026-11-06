@@ -21,9 +21,10 @@ DateTime (RFC 3339, e.g. `2026-11-06T09:00:00Z`) with their XML types; every oth
 type is sent as a string. A value Salesforce returns in another but equivalent form
 (`2026-11-06T09:00:00.000Z`, `7.0`) keeps the configured form in state.
 
-Only the fields listed in `values` are managed: changes made outside Terraform to those
-fields show as drift, other fields are ignored. Removing a field from `values` clears it
-in Salesforce. Empty strings are not allowed; remove the field instead.
+Terraform owns the whole record: every field not listed in `values` is cleared, and a
+value changed or set outside Terraform shows as drift and is reverted by the next apply.
+An unchecked Checkbox counts as unset, so `Flag__c = "false"` and leaving `Flag__c` out
+are the same. Empty strings are not allowed; leave the field out instead.
 
 {{ .SchemaMarkdown | trimspace }}
 
@@ -33,6 +34,5 @@ Import is supported using the following syntax:
 
 {{ codefile "shell" "examples/resources/salesforce_custom_metadata_record/import.sh" }}
 
-Import puts every non-empty field into `values`, including unchecked Checkbox fields
-(`false`). The next apply clears every imported field that the configuration leaves
-out of `values`, so list all fields whose values you want to keep.
+Import reads every field that has a value into `values`. List the same fields in the
+configuration, or the next apply clears the ones you left out.

@@ -296,8 +296,8 @@ resource "salesforce_custom_metadata_record" "test" {
 				),
 			},
 			{
-				// Out-of-band change of a managed field shows as drift.
-				PreConfig: func() { org.set("Probe.One", "Text__c", "edited in setup") },
+				// The record is owned as a whole: a field set outside Terraform shows as drift.
+				PreConfig: func() { org.set("Probe.One", "Amount__c", "5") },
 				Config: `
 resource "salesforce_custom_metadata_record" "test" {
   type           = "Probe"
@@ -321,21 +321,42 @@ resource "salesforce_custom_metadata_record" "test" {
 						return fmt.Errorf("expected 1 state, got %d", len(states))
 					}
 					a := states[0].Attributes
+					// Unchecked Flag__c reads back as false and is left out like an unset field.
 					want := map[string]string{
-						"id":             "Probe.One",
-						"type":           "Probe",
-						"developer_name": "One",
-						"label":          "One renamed",
-						"protected":      "false",
-						"values.%":       "3",
-						"values.Text__c": "edited in setup",
-						"values.When__c": "2026-11-06T09:00:00.000Z",
-						"values.Flag__c": "false",
+						"id":               "Probe.One",
+						"type":             "Probe",
+						"developer_name":   "One",
+						"label":            "One renamed",
+						"protected":        "false",
+						"values.%":         "3",
+						"values.Text__c":   "changed",
+						"values.When__c":   "2026-11-06T09:00:00.000Z",
+						"values.Amount__c": "5.0",
 					}
 					for k, v := range want {
 						if a[k] != v {
 							return fmt.Errorf("%s: expected %q, got %q", k, v, a[k])
 						}
+					}
+					return nil
+				},
+			},
+			{
+				// Applying the config clears the field set outside Terraform.
+				Config: `
+resource "salesforce_custom_metadata_record" "test" {
+  type           = "Probe"
+  developer_name = "One"
+  label          = "One renamed"
+  values = {
+    Text__c = "changed"
+    When__c = "2026-11-06T09:00:00Z"
+  }
+}
+`,
+				Check: func(*terraform.State) error {
+					if _, ok := org.records["Probe.One"]["Amount__c"]; ok {
+						return fmt.Errorf("Amount__c set outside Terraform was not cleared")
 					}
 					return nil
 				},
@@ -375,6 +396,24 @@ resource "salesforce_custom_metadata_record" "test" {
 				ExpectNonEmptyPlan: true,
 			},
 		},
+	})
+}
+
+func TestCustomMetadataRecordResource_CheckboxFalse(t *testing.T) {
+	useFakeOrg(t)
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{{
+			Config: `
+resource "salesforce_custom_metadata_record" "test" {
+  type           = "Probe"
+  developer_name = "One"
+  label          = "One"
+  values         = { Flag__c = "false" }
+}
+`,
+			Check: resource.TestCheckResourceAttr("salesforce_custom_metadata_record.test", "values.Flag__c", "false"),
+		}},
 	})
 }
 
@@ -534,12 +573,12 @@ resource "salesforce_custom_metadata_record" "test" {
 				ImportStateId: "TfProviderProbe." + name,
 				ImportStateCheck: func(states []*terraform.InstanceState) error {
 					a := states[0].Attributes
-					// Date__c and Number__c were cleared by the update; import sees every non-null field.
+					// Date__c and Number__c were cleared by the update; the unchecked Checkbox__c is
+					// left out like an unset field.
 					want := map[string]string{
-						"values.%":           "3",
+						"values.%":           "2",
 						"values.Text__c":     "changed",
 						"values.DateTime__c": "2026-11-07T09:00:00.000Z",
-						"values.Checkbox__c": "false",
 						"label":              "Acc updated",
 					}
 					for k, v := range want {

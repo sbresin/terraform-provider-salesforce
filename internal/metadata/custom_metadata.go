@@ -55,7 +55,7 @@ func (c *Client) ReadCustomMetadata(ctx context.Context, fullName string) (*Cust
 }
 
 // DeployCustomMetadata creates or updates a Custom Metadata record and returns the deployment ID.
-// Fields listed in Nulls are cleared.
+// The record is replaced as a whole: fields of the type that are not in Values are cleared.
 func (c *Client) DeployCustomMetadata(ctx context.Context, rec CustomMetadataDeploy) (string, error) {
 	fieldTypes, err := c.customMetadataFieldTypes(ctx, rec.Type)
 	if err != nil {
@@ -161,7 +161,12 @@ func buildCustomMetadataDeployZip(rec CustomMetadataDeploy, fieldTypes map[strin
 		fmt.Fprintf(&values, "\n    <values><field>%s</field><value xsi:type=\"%s\">%s</value></values>",
 			xmlEscape(f), xsiTypeFor(fieldTypes[f]), xmlEscape(rec.Values[f]))
 	}
-	nulls := append([]string(nil), rec.Nulls...)
+	var nulls []string
+	for f := range fieldTypes {
+		if _, ok := rec.Values[f]; !ok {
+			nulls = append(nulls, f)
+		}
+	}
 	sort.Strings(nulls)
 	for _, f := range nulls {
 		fmt.Fprintf(&values, "\n    <values><field>%s</field><value xsi:nil=\"true\"/></values>", xmlEscape(f))

@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -100,7 +101,7 @@ func (r *CustomMetadataRecordResource) Schema(_ context.Context, _ resource.Sche
 			"values": schema.MapAttribute{
 				Description: "Field API name -> value, e.g. { Certificate__c = \"MyCert\", ValidFrom__c = \"2026-11-06T09:00:00Z\" }. " +
 					"Write Checkbox as true/false, Date as YYYY-MM-DD and DateTime as RFC 3339. " +
-					"Only listed fields are managed; removing a field clears it.",
+					"The record is owned as a whole: fields not listed are cleared, also when set outside Terraform.",
 				Optional:    true,
 				ElementType: types.StringType,
 				Validators: []validator.Map{
@@ -132,7 +133,7 @@ func (r *CustomMetadataRecordResource) Create(ctx context.Context, req resource.
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	resp.Diagnostics.Append(r.deployAndRead(ctx, plan, nil, &resp.State)...)
+	resp.Diagnostics.Append(r.deployAndRead(ctx, plan, &resp.State)...)
 }
 
 func (r *CustomMetadataRecordResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -142,7 +143,7 @@ func (r *CustomMetadataRecordResource) Read(ctx context.Context, req resource.Re
 		return
 	}
 
-	newState, err := r.readState(ctx, state.Type.ValueString(), state.DeveloperName.ValueString(), state.Values, false)
+	newState, err := r.readState(ctx, state.Type.ValueString(), state.DeveloperName.ValueString(), state.Values)
 	if err != nil {
 		if errors.Is(err, metadata.ErrNotFound) {
 			resp.State.RemoveResource(ctx)
@@ -155,28 +156,13 @@ func (r *CustomMetadataRecordResource) Read(ctx context.Context, req resource.Re
 }
 
 func (r *CustomMetadataRecordResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan, state customMetadataRecordResourceModel
+	var plan customMetadataRecordResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// A deploy merges values, so fields dropped from the config are cleared explicitly.
-	planValues, diags := stringMap(ctx, plan.Values)
-	resp.Diagnostics.Append(diags...)
-	stateValues, diags := stringMap(ctx, state.Values)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	var nulls []string
-	for f := range stateValues {
-		if _, ok := planValues[f]; !ok {
-			nulls = append(nulls, f)
-		}
-	}
-	resp.Diagnostics.Append(r.deployAndRead(ctx, plan, nulls, &resp.State)...)
+	resp.Diagnostics.Append(r.deployAndRead(ctx, plan, &resp.State)...)
 }
 
 func (r *CustomMetadataRecordResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -200,23 +186,19 @@ func (r *CustomMetadataRecordResource) Delete(ctx context.Context, req resource.
 	}
 }
 
-// ImportState takes <type>.<developer_name> and puts every non-null field into values.
+// ImportState takes <type>.<developer_name>; Read then fills in the record.
 func (r *CustomMetadataRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	cmdtType, devName, ok := strings.Cut(req.ID, ".")
 	if !ok || cmdtType == "" || devName == "" {
 		resp.Diagnostics.AddError("Invalid Import ID", fmt.Sprintf("Expected <type>.<developer_name>, got %q", req.ID))
 		return
 	}
-
-	state, err := r.readState(ctx, cmdtType, devName, types.MapNull(types.StringType), true)
-	if err != nil {
-		resp.Diagnostics.AddError("Error Importing Custom Metadata Record", err.Error())
-		return
-	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("type"), cmdtType)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("developer_name"), devName)...)
 }
 
-func (r *CustomMetadataRecordResource) deployAndRead(ctx context.Context, plan customMetadataRecordResourceModel, nulls []string, out interface {
+func (r *CustomMetadataRecordResource) deployAndRead(ctx context.Context, plan customMetadataRecordResourceModel, out interface {
 	Set(context.Context, interface{}) diag.Diagnostics
 }) diag.Diagnostics {
 	var diags diag.Diagnostics
@@ -232,7 +214,6 @@ func (r *CustomMetadataRecordResource) deployAndRead(ctx context.Context, plan c
 		Label:         plan.Label.ValueString(),
 		Protected:     plan.Protected.ValueBool(),
 		Values:        values,
-		Nulls:         nulls,
 	})
 	if err != nil {
 		diags.AddError("Error Deploying Custom Metadata Record", err.Error())
@@ -243,7 +224,7 @@ func (r *CustomMetadataRecordResource) deployAndRead(ctx context.Context, plan c
 		return diags
 	}
 
-	state, err := r.readState(ctx, plan.Type.ValueString(), plan.DeveloperName.ValueString(), plan.Values, false)
+	state, err := r.readState(ctx, plan.Type.ValueString(), plan.DeveloperName.ValueString(), plan.Values)
 	if err != nil {
 		diags.AddError("Error Reading Custom Metadata Record", err.Error())
 		return diags
@@ -252,32 +233,31 @@ func (r *CustomMetadataRecordResource) deployAndRead(ctx context.Context, plan c
 	return diags
 }
 
-// readState reads the record. On import every non-null field goes into
-// values; otherwise only the managed keys do, keeping the managed form when the org returns
-// an equivalent one (2026-11-06T09:00:00Z vs 2026-11-06T09:00:00.000Z, 7 vs 7.0). Tracking
-// only managed keys is needed because an unset Checkbox always reads back as false.
-func (r *CustomMetadataRecordResource) readState(ctx context.Context, cmdtType, devName string, managed types.Map, importAll bool) (*customMetadataRecordResourceModel, error) {
+// readState reads the record. The record is owned as a whole, so every non-null field goes
+// into values, keeping the prior form when the org returns an equivalent one
+// (2026-11-06T09:00:00Z vs 2026-11-06T09:00:00.000Z, 7 vs 7.0). An unset Checkbox reads back
+// as false, so a false Checkbox only appears when the prior state has it.
+func (r *CustomMetadataRecordResource) readState(ctx context.Context, cmdtType, devName string, prior types.Map) (*customMetadataRecordResourceModel, error) {
 	fullName := cmdtType + "." + devName
 	rec, err := r.clients.Metadata.ReadCustomMetadata(ctx, fullName)
 	if err != nil {
 		return nil, err
 	}
 
-	prior, diags := stringMap(ctx, managed)
+	priorValues, diags := stringMap(ctx, prior)
 	out := map[string]string{}
 	for f, remote := range rec.Values {
-		want, isManaged := prior[f]
+		want, inPrior := priorValues[f]
 		switch {
-		case importAll:
-			out[f] = remote.Value
-		case isManaged && metadata.SameValue(remote.Type, want, remote.Value):
+		case inPrior && metadata.SameValue(remote.Type, want, remote.Value):
 			out[f] = want
-		case isManaged:
+		case remote.Type == "xsd:boolean" && remote.Value == "false":
+		default:
 			out[f] = remote.Value
 		}
 	}
 	values := types.MapNull(types.StringType)
-	if !managed.IsNull() || importAll && len(out) > 0 {
+	if !prior.IsNull() || len(out) > 0 {
 		var d diag.Diagnostics
 		values, d = types.MapValueFrom(ctx, types.StringType, out)
 		diags.Append(d...)
